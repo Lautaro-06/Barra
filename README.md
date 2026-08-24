@@ -45,28 +45,11 @@ La app de escritorio funciona de forma local: el frontend (JavaFX o Electron/Rea
 Barra/
 ├── barra-backend/ # Python con Flask y FastAPI
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── database.py
-│   │   ├── main.py
-│   │   └── models.py
 │   ├── README.md
 │   └── requirements.txt
 ├── barra-gui/ # JavaFX con Electron y React
 │   ├── src/main/java/com/barra/gui/ # Archivos de las clases en texto plano
-│   │   ├── ApiClient.java
-│   │   ├── Json.java
-│   │   ├── Main.java
-│   │   ├── MainWindow.java
-│   │   ├── Pedido.java
-│   │   └── Producto.java
 │   ├── target/classes/com/barra/gui/ # Archivos compilados en bytecode
-│   │   ├── ApiClient.class
-│   │   ├── Json$Parser.class
-│   │   ├── Json.class
-│   │   ├── Main.class
-│   │   ├── MainWindow.class
-│   │   ├── Pedido.class
-│   │   └── Producto.class
 │   ├── README.md
 │   └── pom.xml # Compila, prueba y empaqueta el proyecto
 └── README.md # Este documento

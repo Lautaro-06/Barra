@@ -15,8 +15,8 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import get_connection, init_db, write_lock
-from app.models import (
+from .database import get_connection, init_db, write_lock
+from .models import (
     ProductoIn,
     ProductoOut,
     PedidoIn,

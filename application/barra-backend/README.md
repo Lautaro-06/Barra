@@ -14,7 +14,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 Queda escuchando en http://127.0.0.1:8000
 Documentación interactiva automática en http://127.0.0.1:8000/docs
 
-## Endpoints (probados y funcionando)
+## Endpoints (probando)
 
 - GET  /health
 - GET  /productos

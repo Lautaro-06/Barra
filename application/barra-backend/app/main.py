@@ -19,6 +19,7 @@ from .database import get_connection, init_db, write_lock
 from .models import (
     ProductoIn,
     ProductoOut,
+    ProductoUpdate,
     PedidoIn,
     PedidoOut,
     DetalleOut,
@@ -52,9 +53,18 @@ def health():
 # ---------- Productos (catálogo) ----------
 
 @app.get("/productos", response_model=list[ProductoOut])
-def listar_productos():
+def listar_productos(incluir_inactivos: bool = False):
+    """Por defecto solo trae productos activos (los que están "de alta"
+    en el catálogo). El cajero/mozo arma pedidos contra este listado, así
+    que un producto dado de baja no debería ni aparecer como opción.
+    `incluir_inactivos=true` es para pantallas de administración del
+    catálogo, donde sí interesa ver (y poder reactivar) lo dado de baja."""
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM producto ORDER BY nombre").fetchall()
+    query = "SELECT * FROM producto"
+    if not incluir_inactivos:
+        query += " WHERE activo = 1"
+    query += " ORDER BY nombre"
+    rows = conn.execute(query).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -69,6 +79,68 @@ def crear_producto(producto: ProductoIn):
         conn.commit()
         nuevo_id = cur.lastrowid
     row = conn.execute("SELECT * FROM producto WHERE id = ?", (nuevo_id,)).fetchone()
+    return dict(row)
+
+
+@app.put("/productos/{producto_id}", response_model=ProductoOut)
+@app.patch("/productos/{producto_id}", response_model=ProductoOut)
+def modificar_producto(producto_id: int, cambios: ProductoUpdate):
+    """
+    Modificación de producto. Se registran ambos verbos (PUT y PATCH)
+    contra el mismo handler: la semántica que termina importando acá es
+    la de PATCH (actualización parcial, `exclude_unset` -> solo se tocan
+    los campos que vinieron en el body), pero como el enunciado deja
+    PUT/PATCH como sinónimos y el JSON que manda la GUI ya es parcial por
+    naturaleza (un formulario de edición no siempre repite todo), se
+    acepta con cualquiera de los dos verbos para no atarse a esa decisión
+    del lado del cliente.
+    """
+    conn = get_connection()
+    with write_lock:
+        row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Producto no encontrado")
+
+        campos = cambios.model_dump(exclude_unset=True)
+        if not campos:
+            raise HTTPException(400, "No se envió ningún campo para modificar")
+
+        nombre = campos.get("nombre", row["nombre"])
+        precio = campos.get("precio", row["precio"])
+        stock = campos.get("stock", row["stock"])
+        activo = campos.get("activo", bool(row["activo"]))
+
+        conn.execute(
+            "UPDATE producto SET nombre = ?, precio = ?, stock = ?, activo = ? WHERE id = ?",
+            (nombre, precio, stock, int(activo), producto_id),
+        )
+        conn.commit()
+
+    row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()
+    return dict(row)
+
+
+@app.delete("/productos/{producto_id}", response_model=ProductoOut)
+def eliminar_producto(producto_id: int):
+    """
+    Baja de producto. Es una baja LÓGICA (activo = 0), no un DELETE de
+    SQL: `detalle_pedido.producto_id` referencia esta tabla sin CASCADE,
+    así que un DELETE físico de un producto que ya apareció en algún
+    pedido rompería la foreign key (o, peor, si tuviera cascade, borraría
+    silenciosamente el detalle de pedidos históricos). Con baja lógica el
+    producto desaparece de `GET /productos` (ver más arriba) pero el
+    historial de pedidos que lo mencionan queda intacto, y se puede dar
+    de alta de nuevo con PATCH {"activo": true}.
+    """
+    conn = get_connection()
+    with write_lock:
+        row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Producto no encontrado")
+        conn.execute("UPDATE producto SET activo = 0 WHERE id = ?", (producto_id,))
+        conn.commit()
+
+    row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()
     return dict(row)
 
 
@@ -93,6 +165,23 @@ def _pedido_a_dict(conn, pedido_row) -> dict:
         "nota": pedido_row["nota"],
         "detalles": [dict(d) for d in detalles_rows],
     }
+
+
+def _restaurar_stock(conn, pedido_id: int) -> None:
+    """Le devuelve al stock de cada producto la cantidad que este pedido
+    tenía descontada. Se usa tanto al modificar un pedido (se devuelve
+    todo y se vuelve a descontar con las líneas nuevas) como al
+    cancelarlo (se devuelve y no se vuelve a descontar nada). No hace
+    commit: queda dentro de la transacción del caller."""
+    detalles = conn.execute(
+        "SELECT producto_id, cantidad FROM detalle_pedido WHERE pedido_id = ?",
+        (pedido_id,),
+    ).fetchall()
+    for det in detalles:
+        conn.execute(
+            "UPDATE producto SET stock = stock + ? WHERE id = ?",
+            (det["cantidad"], det["producto_id"]),
+        )
 
 
 @app.get("/pedidos", response_model=list[PedidoOut])
@@ -149,6 +238,114 @@ def crear_pedido(pedido: PedidoIn):
                 (det.cantidad, det.producto_id),
             )
 
+        conn.commit()
+
+    row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
+    return _pedido_a_dict(conn, row)
+
+
+@app.put("/pedidos/{pedido_id}", response_model=PedidoOut)
+def modificar_pedido(pedido_id: int, pedido: PedidoIn):
+    """
+    Caso de uso del cajero: se equivocó al cargar el pedido (falta un
+    producto, sobra otro, cambió la cantidad) y lo corrige antes de que
+    se empiece a preparar.
+
+    Solo se puede modificar mientras esté "en_preparacion". Una vez que
+    pasa a "listo" o "entregado" ya se cocinó/sirvió, así que reescribir
+    el detalle ahí sería mentir sobre qué se preparó realmente; para ese
+    caso lo que corresponde es cancelar (DELETE) y cargar un pedido nuevo.
+
+    La estrategia reutiliza la misma lógica que crear_pedido: se devuelve
+    todo el stock de las líneas viejas (_restaurar_stock) y se vuelve a
+    "armar" el pedido con las líneas nuevas, validando stock disponible
+    de nuevo antes de tocar nada. Si algo no entra (stock insuficiente,
+    producto inexistente), se hace rollback de la restauración de stock
+    para no dejar la conexión compartida con una transacción a medio
+    aplicar.
+    """
+    conn = get_connection()
+    with write_lock:
+        row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Pedido no encontrado")
+        if row["estado"] != "en_preparacion":
+            raise HTTPException(
+                409,
+                f"No se puede modificar un pedido en estado '{row['estado']}'",
+            )
+
+        # 1. Devolver el stock de las líneas actuales
+        _restaurar_stock(conn, pedido_id)
+
+        # 2. Validar que las líneas nuevas entren con el stock ya restaurado
+        total = 0.0
+        for det in pedido.detalles:
+            prod = conn.execute(
+                "SELECT * FROM producto WHERE id = ?", (det.producto_id,)
+            ).fetchone()
+            if prod is None:
+                conn.rollback()
+                raise HTTPException(404, f"Producto {det.producto_id} no existe")
+            if prod["stock"] < det.cantidad:
+                conn.rollback()
+                raise HTTPException(
+                    400,
+                    f"Stock insuficiente para '{prod['nombre']}' "
+                    f"(pedido: {det.cantidad}, stock: {prod['stock']})",
+                )
+            total += prod["precio"] * det.cantidad
+
+        # 3. Reemplazar el detalle y descontar stock de las líneas nuevas
+        conn.execute("DELETE FROM detalle_pedido WHERE pedido_id = ?", (pedido_id,))
+        for det in pedido.detalles:
+            conn.execute(
+                "INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad) VALUES (?, ?, ?)",
+                (pedido_id, det.producto_id, det.cantidad),
+            )
+            conn.execute(
+                "UPDATE producto SET stock = stock - ? WHERE id = ?",
+                (det.cantidad, det.producto_id),
+            )
+
+        conn.execute(
+            "UPDATE pedido SET total = ?, nota = ? WHERE id = ?",
+            (total, pedido.nota, pedido_id),
+        )
+        conn.commit()
+
+    row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
+    return _pedido_a_dict(conn, row)
+
+
+@app.delete("/pedidos/{pedido_id}", response_model=PedidoOut)
+def cancelar_pedido(pedido_id: int):
+    """
+    Caso de uso del cajero: cancelar un pedido (el cliente se arrepintió,
+    se cargó por error, etc).
+
+    No se borra la fila de `pedido`: queda como registro para el
+    arqueo/historial del día, solo que con estado "cancelado". Lo que sí
+    se hace es devolver el stock que ese pedido tenía descontado
+    (_restaurar_stock), porque esos productos vuelven a estar
+    disponibles para vender.
+
+    No se puede cancelar un pedido ya entregado (ya se le sirvió al
+    cliente, no hay stock que devolver ni sentido en "deshacerlo"), ni
+    cancelar dos veces el mismo pedido.
+    """
+    conn = get_connection()
+    with write_lock:
+        row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Pedido no encontrado")
+        if row["estado"] == "cancelado":
+            raise HTTPException(409, "El pedido ya estaba cancelado")
+        if row["estado"] == "entregado":
+            raise HTTPException(409, "No se puede cancelar un pedido ya entregado")
+
+        _restaurar_stock(conn, pedido_id)
+        conn.execute("UPDATE pedido SET estado = ? WHERE id = ?", ("cancelado", pedido_id))
         conn.commit()
 
     row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()

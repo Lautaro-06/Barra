@@ -17,10 +17,14 @@ Documentación interactiva automática en http://127.0.0.1:8000/docs
 ## Endpoints (probando)
 
 - GET  /health
-- GET  /productos
+- GET  /productos                    (?incluir_inactivos=true para ver también los dados de baja)
 - POST /productos
+- PUT/PATCH /productos/{id}          (modifica nombre/precio/stock/activo, todo opcional)
+- DELETE /productos/{id}             (baja lógica: activo = 0, no borra la fila)
 - GET  /pedidos
-- POST /pedidos              (descuenta stock, calcula total)
+- POST /pedidos                      (descuenta stock, calcula total)
+- PUT  /pedidos/{id}                 (caso de uso del cajero: corregir un pedido en_preparacion)
+- DELETE /pedidos/{id}               (caso de uso del cajero: cancelar y devolver stock)
 - PATCH /pedidos/{id}/estado
 
 ## Qué falta (próximos puntos del proyecto)

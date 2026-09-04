@@ -13,12 +13,24 @@ class ProductoOut(BaseModel):
     nombre: str
     precio: float
     stock: int
+    activo: bool
 
 
 class ProductoIn(BaseModel):
     nombre: str
     precio: float = Field(gt=0)
     stock: int = Field(ge=0, default=0)
+
+
+class ProductoUpdate(BaseModel):
+    """Para PUT/PATCH /productos/{id}. Todos los campos son opcionales:
+    solo se actualiza lo que venga en el body (permite mandar nomás el
+    precio, o nomás el stock, sin repetir el resto)."""
+
+    nombre: str | None = None
+    precio: float | None = Field(default=None, gt=0)
+    stock: int | None = Field(default=None, ge=0)
+    activo: bool | None = None
 
 
 class DetalleIn(BaseModel):

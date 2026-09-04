@@ -49,7 +49,8 @@ def init_db() -> None:
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre  TEXT NOT NULL,
             precio  REAL NOT NULL,
-            stock   INTEGER NOT NULL DEFAULT 0
+            stock   INTEGER NOT NULL DEFAULT 0,
+            activo  INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS pedido (
@@ -69,6 +70,16 @@ def init_db() -> None:
         """
     )
     conn.commit()
+
+    # Migración liviana: si `barra.db` ya existía de antes (sin la columna
+    # `activo`, agregada para la baja lógica de productos), se la agrega.
+    # CREATE TABLE IF NOT EXISTS no toca tablas que ya existen, así que la
+    # columna nueva hay que sumarla a mano la primera vez que corre este
+    # código sobre una base vieja.
+    columnas = [fila["name"] for fila in conn.execute("PRAGMA table_info(producto)")]
+    if "activo" not in columnas:
+        conn.execute("ALTER TABLE producto ADD COLUMN activo INTEGER NOT NULL DEFAULT 1")
+        conn.commit()
 
     # Semilla de datos para poder probar la GUI Java desde el primer día
     cur = conn.execute("SELECT COUNT(*) FROM producto")

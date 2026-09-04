@@ -40,24 +40,50 @@ def get_connection() -> sqlite3.Connection:
     return _connection
 
 
+def _agregar_columna_si_falta(conn: sqlite3.Connection, tabla: str, columna: str, definicion: str) -> None:
+    """ALTER TABLE ... ADD COLUMN es idempotente a mano: SQLite no soporta
+    'IF NOT EXISTS' para columnas, así que se chequea el esquema actual
+    primero. Esto permite versionar barra.db sin tener que borrarlo cada
+    vez que se agrega un campo nuevo (ej: producto.disponible)."""
+    columnas_actuales = [fila["name"] for fila in conn.execute(f"PRAGMA table_info({tabla})")]
+    if columna not in columnas_actuales:
+        conn.execute(f"ALTER TABLE {tabla} ADD COLUMN {definicion}")
+
+
 def init_db() -> None:
     """Crea las tablas del DER (sección 16) si no existen todavía."""
     conn = get_connection()
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS producto (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre      TEXT NOT NULL,
+            precio      REAL NOT NULL,
+            stock       INTEGER NOT NULL DEFAULT 0,
+            disponible  INTEGER NOT NULL DEFAULT 1
+        );
+
+        CREATE TABLE IF NOT EXISTS mesa (
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre  TEXT NOT NULL,
-            precio  REAL NOT NULL,
-            stock   INTEGER NOT NULL DEFAULT 0
+            estado  TEXT NOT NULL DEFAULT 'libre'
+        );
+
+        CREATE TABLE IF NOT EXISTS cuenta (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            mesa_id         INTEGER NOT NULL REFERENCES mesa(id),
+            fecha_apertura  TEXT NOT NULL,
+            fecha_cierre    TEXT,
+            estado          TEXT NOT NULL DEFAULT 'abierta'
         );
 
         CREATE TABLE IF NOT EXISTS pedido (
-            id       INTEGER PRIMARY KEY AUTOINCREMENT,
-            fecha    TEXT NOT NULL,
-            estado   TEXT NOT NULL DEFAULT 'en_preparacion',
-            total    REAL NOT NULL DEFAULT 0,
-            nota     TEXT
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha      TEXT NOT NULL,
+            estado     TEXT NOT NULL DEFAULT 'en_preparacion',
+            total      REAL NOT NULL DEFAULT 0,
+            nota       TEXT,
+            cuenta_id  INTEGER REFERENCES cuenta(id)
         );
 
         CREATE TABLE IF NOT EXISTS detalle_pedido (
@@ -66,19 +92,43 @@ def init_db() -> None:
             producto_id  INTEGER NOT NULL REFERENCES producto(id),
             cantidad     INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS configuracion (
+            id            INTEGER PRIMARY KEY CHECK (id = 1),
+            nombre_local  TEXT NOT NULL DEFAULT 'Mi local'
+        );
         """
     )
+    conn.commit()
+
+    # Migraciones para bases de datos creadas antes de sumar mesas/cuentas -
+    # así no hace falta borrar barra.db para actualizar.
+    _agregar_columna_si_falta(conn, "producto", "disponible", "disponible INTEGER NOT NULL DEFAULT 1")
+    _agregar_columna_si_falta(conn, "pedido", "cuenta_id", "cuenta_id INTEGER REFERENCES cuenta(id)")
     conn.commit()
 
     # Semilla de datos para poder probar la GUI Java desde el primer día
     cur = conn.execute("SELECT COUNT(*) FROM producto")
     if cur.fetchone()[0] == 0:
         conn.executemany(
-            "INSERT INTO producto (nombre, precio, stock) VALUES (?, ?, ?)",
+            "INSERT INTO producto (nombre, precio, stock, disponible) VALUES (?, ?, ?, 1)",
             [
                 ("Hamburguesa clásica", 4500.0, 20),
                 ("Papas fritas", 2200.0, 30),
                 ("Gaseosa 500ml", 1800.0, 40),
             ],
         )
+        conn.commit()
+
+    cur = conn.execute("SELECT COUNT(*) FROM mesa")
+    if cur.fetchone()[0] == 0:
+        conn.executemany(
+            "INSERT INTO mesa (nombre, estado) VALUES (?, 'libre')",
+            [(f"Mesa {i}",) for i in range(1, 7)],
+        )
+        conn.commit()
+
+    cur = conn.execute("SELECT COUNT(*) FROM configuracion")
+    if cur.fetchone()[0] == 0:
+        conn.execute("INSERT INTO configuracion (id, nombre_local) VALUES (1, 'Mi local')")
         conn.commit()

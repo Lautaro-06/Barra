@@ -20,9 +20,9 @@ import java.util.Map;
 /**
  * MainWindow
  *
- * Ventana principal: una barra lateral para moverse entre las tres pantallas
- * del local (Vender, Cocina, Catálogo) y, atrás de todo, un polling
- * periódico al backend Python que las mantiene sincronizadas entre sí.
+ * Ventana principal: una barra lateral para moverse entre las cuatro
+ * pantallas del local (Vender, Mesas, Cocina, Admin) y, atrás de todo, un
+ * polling periódico al backend Python que las mantiene sincronizadas entre sí.
  */
 public class MainWindow extends JFrame {
 
@@ -33,11 +33,13 @@ public class MainWindow extends JFrame {
     private final Map<String, NavButton> botonesNav = new LinkedHashMap<>();
 
     private final VentaPanel ventaPanel = new VentaPanel(api, this::refrescarDatos);
+    private final MesasPanel mesasPanel = new MesasPanel(api, this::refrescarDatos);
     private final CocinaPanel cocinaPanel = new CocinaPanel(api, this::refrescarDatos);
-    private final CatalogoPanel catalogoPanel = new CatalogoPanel(api, this::refrescarDatos);
+    private final AdminPanel adminPanel = new AdminPanel(api, this::refrescarDatos);
 
     private final JLabel estadoDot = new JLabel("●");
     private final JLabel estadoTexto = new JLabel("Conectando...");
+    private final JLabel marcaTexto = new JLabel("Barra");
 
     public MainWindow() {
         super("Barra");
@@ -52,16 +54,17 @@ public class MainWindow extends JFrame {
         add(construirBarraLateral(), BorderLayout.WEST);
 
         contenido.add(ventaPanel, "vender");
+        contenido.add(mesasPanel, "mesas");
         contenido.add(cocinaPanel, "cocina");
-        contenido.add(catalogoPanel, "catalogo");
+        contenido.add(adminPanel, "admin");
         add(contenido, BorderLayout.CENTER);
 
         mostrarPantalla("vender");
         refrescarDatos();
 
-        // Polling simple cada 4s: alcanza para que el mostrador y la cocina
-        // vean los cambios del otro casi al instante, sin meter WebSockets
-        // todavía a esta primera versión de la GUI.
+        // Polling simple cada 4s: alcanza para que el mostrador, las mesas
+        // y la cocina se vean sincronizados entre sí casi al instante, sin
+        // meter WebSockets todavía a esta primera versión de la GUI.
         Timer timer = new Timer(4000, e -> refrescarDatos());
         timer.start();
     }
@@ -78,20 +81,21 @@ public class MainWindow extends JFrame {
         marca.setLayout(new BoxLayout(marca, BoxLayout.X_AXIS));
         marca.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel logo = new JLabel(AppIcons.marca(30));
-        JLabel nombre = new JLabel("Barra");
-        nombre.setFont(UiTheme.TITULO);
-        nombre.setForeground(Color.WHITE);
-        nombre.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
+        marcaTexto.setFont(UiTheme.TITULO);
+        marcaTexto.setForeground(Color.WHITE);
+        marcaTexto.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
         marca.add(logo);
-        marca.add(nombre);
+        marca.add(marcaTexto);
         sidebar.add(marca);
         sidebar.add(Box.createVerticalStrut(28));
 
         sidebar.add(crearBotonNav("Vender", AppIcons.vender(Color.WHITE), "vender"));
         sidebar.add(Box.createVerticalStrut(8));
+        sidebar.add(crearBotonNav("Mesas", AppIcons.mesas(Color.WHITE), "mesas"));
+        sidebar.add(Box.createVerticalStrut(8));
         sidebar.add(crearBotonNav("Cocina", AppIcons.cocina(Color.WHITE), "cocina"));
         sidebar.add(Box.createVerticalStrut(8));
-        sidebar.add(crearBotonNav("Catálogo", AppIcons.catalogo(Color.WHITE), "catalogo"));
+        sidebar.add(crearBotonNav("Admin", AppIcons.admin(Color.WHITE), "admin"));
 
         sidebar.add(Box.createVerticalGlue());
 
@@ -132,9 +136,21 @@ public class MainWindow extends JFrame {
         try {
             List<Producto> productos = api.listarProductos();
             List<Pedido> pedidos = api.listarPedidos();
+            List<Mesa> mesas = api.listarMesas();
+            Configuracion config = api.obtenerConfiguracion();
+
             ventaPanel.setProductos(productos);
+            mesasPanel.setProductos(productos);
+            mesasPanel.setMesas(mesas);
             cocinaPanel.setPedidos(pedidos);
-            catalogoPanel.setProductos(productos);
+            adminPanel.setProductos(productos);
+            adminPanel.setMesas(mesas);
+            adminPanel.setConfiguracion(config);
+
+            if (!marcaTexto.getText().equals(config.nombreLocal)) {
+                marcaTexto.setText(config.nombreLocal);
+                setTitle(config.nombreLocal);
+            }
         } catch (Exception ex) {
             estadoTexto.setText("Error al sincronizar");
         }

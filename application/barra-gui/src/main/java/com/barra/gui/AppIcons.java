@@ -101,6 +101,53 @@ public final class AppIcons {
         };
     }
 
+    public static Icon mesas(Color color) {
+        return mesas(color, 20);
+    }
+
+    public static Icon mesas(Color color, int size) {
+        return new VectorIcon(size, color) {
+            @Override
+            Shape construir(double s) {
+                // Mesa redonda vista desde arriba, con una silla (cuadrada)
+                // en cada esquina - la lectura clásica de "plano de salón".
+                Area area = new Area(new Ellipse2D.Double(0.28 * s, 0.28 * s, 0.44 * s, 0.44 * s));
+                double lado = 0.20;
+                double arco = 0.05;
+                area.add(new Area(new RoundRectangle2D.Double(0.02 * s, 0.02 * s, lado * s, lado * s, arco * s, arco * s)));
+                area.add(new Area(new RoundRectangle2D.Double(0.78 * s, 0.02 * s, lado * s, lado * s, arco * s, arco * s)));
+                area.add(new Area(new RoundRectangle2D.Double(0.02 * s, 0.78 * s, lado * s, lado * s, arco * s, arco * s)));
+                area.add(new Area(new RoundRectangle2D.Double(0.78 * s, 0.78 * s, lado * s, lado * s, arco * s, arco * s)));
+                return area;
+            }
+        };
+    }
+
+    public static Icon admin(Color color) {
+        return admin(color, 20);
+    }
+
+    public static Icon admin(Color color, int size) {
+        return new VectorIcon(size, color) {
+            @Override
+            Shape construir(double s) {
+                // Tres controles deslizantes (sliders), clásico ícono de "configuración".
+                Area area = new Area();
+                double[] filas = {0.22, 0.5, 0.78};
+                double[] manijas = {0.62, 0.32, 0.72};
+                double grosorLinea = 0.06;
+                double radioManija = 0.13;
+                for (int i = 0; i < filas.length; i++) {
+                    double y = filas[i] * s;
+                    area.add(new Area(new RoundRectangle2D.Double(0.12 * s, y - grosorLinea * s / 2, 0.76 * s, grosorLinea * s, grosorLinea * s, grosorLinea * s)));
+                    double cx = manijas[i] * s;
+                    area.add(new Area(new Ellipse2D.Double(cx - radioManija * s / 2, y - radioManija * s / 2, radioManija * s, radioManija * s)));
+                }
+                return area;
+            }
+        };
+    }
+
     /** Logo de la marca: cuadrado redondeado con una "B" - se usa en el sidebar y como ícono de ventana. */
     public static Icon marca(int size) {
         return new Icon() {

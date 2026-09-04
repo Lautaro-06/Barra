@@ -10,15 +10,12 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -127,66 +124,10 @@ public class VentaPanel extends JPanel {
     public void setProductos(List<Producto> productos) {
         grillaProductos.removeAll();
         for (Producto p : productos) {
-            grillaProductos.add(crearTarjetaProducto(p));
+            grillaProductos.add(ProductoCard.crear(p, this::agregarAlCarrito));
         }
         grillaProductos.revalidate();
         grillaProductos.repaint();
-    }
-
-    private JComponent crearTarjetaProducto(Producto p) {
-        RoundedPanel tarjeta = new RoundedPanel(new BorderLayout(), 14);
-        tarjeta.setPreferredSize(new Dimension(150, 92));
-        tarjeta.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
-
-        boolean sinStock = p.stock <= 0;
-
-        JLabel nombre = new JLabel("<html><body style='width:120px'>" + UiTheme.escapeHtml(p.nombre) + "</body></html>");
-        nombre.setFont(UiTheme.TEXTO_NEGRITA);
-        nombre.setForeground(UiTheme.TEXTO);
-        nombre.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel precio = new JLabel(UiTheme.moneda(p.precio));
-        precio.setFont(UiTheme.SUBTITULO);
-        precio.setForeground(UiTheme.ACENTO_OSCURO);
-        precio.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel stockLbl = new JLabel(sinStock ? "Sin stock" : "Stock: " + p.stock);
-        stockLbl.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
-        stockLbl.setForeground(sinStock ? UiTheme.PELIGRO : (p.stock < 5 ? UiTheme.ACENTO_OSCURO : UiTheme.MUTED));
-        stockLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JPanel textos = new JPanel();
-        textos.setOpaque(false);
-        textos.setLayout(new BoxLayout(textos, BoxLayout.Y_AXIS));
-        textos.add(nombre);
-        textos.add(Box.createVerticalStrut(6));
-        textos.add(precio);
-        textos.add(stockLbl);
-
-        tarjeta.add(textos, BorderLayout.CENTER);
-
-        if (sinStock) {
-            tarjeta.setColorFondo(new Color(0xF2, 0xF2, 0xF4));
-        } else {
-            tarjeta.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            tarjeta.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    tarjeta.setColorFondo(new Color(0xFF, 0xF1, 0xE8));
-                }
-
-                @Override
-                public void mouseExited(MouseEvent e) {
-                    tarjeta.setColorFondo(UiTheme.TARJETA);
-                }
-
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    agregarAlCarrito(p);
-                }
-            });
-        }
-        return tarjeta;
     }
 
     private void agregarAlCarrito(Producto p) {

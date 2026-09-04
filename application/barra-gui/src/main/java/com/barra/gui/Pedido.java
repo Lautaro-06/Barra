@@ -9,14 +9,16 @@ public class Pedido {
     public final String estado;
     public final double total;
     public final String nota;
+    public final String mesaNombre;
     public final List<Detalle> detalles;
 
-    public Pedido(int id, String fecha, String estado, double total, String nota, List<Detalle> detalles) {
+    public Pedido(int id, String fecha, String estado, double total, String nota, String mesaNombre, List<Detalle> detalles) {
         this.id = id;
         this.fecha = fecha;
         this.estado = estado;
         this.total = total;
         this.nota = nota;
+        this.mesaNombre = mesaNombre;
         this.detalles = detalles;
     }
 

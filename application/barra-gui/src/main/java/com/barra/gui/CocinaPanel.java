@@ -114,7 +114,11 @@ public class CocinaPanel extends JPanel {
         tarjeta.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
         tarjeta.setColorBorde(UiTheme.colorEstado(pedido.estado));
 
-        JLabel header = new JLabel("Pedido #" + pedido.id + " · " + horaCorta(pedido.fecha));
+        String encabezadoTxt = "Pedido #" + pedido.id + " · " + horaCorta(pedido.fecha);
+        if (pedido.mesaNombre != null) {
+            encabezadoTxt = pedido.mesaNombre + " · " + horaCorta(pedido.fecha);
+        }
+        JLabel header = new JLabel(encabezadoTxt);
         header.setFont(UiTheme.TEXTO_NEGRITA);
 
         StringBuilder detalleTxt = new StringBuilder("<html>");

@@ -3,6 +3,20 @@
 Cliente Swing que le habla al backend Python por HTTP local (localhost:8000).
 No toca la base de datos directamente: todo pasa por `ApiClient.java`.
 
+La ventana tiene una barra lateral con tres pantallas:
+
+- **Vender**: mostrador táctil. Se toca un producto para sumarlo al pedido,
+  se ajustan cantidades en el carrito y se confirma; el pedido se manda tal
+  cual quedó armado (ya no hay un botón fijo de "2 hamburguesas de prueba").
+- **Cocina**: tablero tipo kanban con los pedidos en curso agrupados por
+  estado (en preparación / listo / entregado), con un botón por tarjeta
+  para avanzar el estado.
+- **Catálogo**: lista de productos con el stock resaltado (rojo si no queda,
+  naranja si es bajo) y un formulario para dar de alta productos nuevos.
+
+Todo se sincroniza solo: `MainWindow` hace polling al backend cada 4
+segundos y empuja los datos a las tres pantallas.
+
 ## Cómo importarlo en Eclipse
 
 1. Eclipse -> File -> Import -> Maven -> Existing Maven Projects
@@ -24,7 +38,13 @@ te avisa arriba de todo: "Backend Python: SIN CONEXIÓN".
 ## Archivos
 
 - `Main.java`        - punto de entrada
-- `MainWindow.java`  - ventana Swing de prueba (catálogo + pedidos)
+- `MainWindow.java`  - ventana principal: sidebar + polling que sincroniza las 3 pantallas
+- `VentaPanel.java`  - pantalla "Vender" (mostrador + carrito)
+- `CocinaPanel.java` - pantalla "Cocina" (tablero kanban de pedidos)
+- `CatalogoPanel.java` - pantalla "Catálogo" (stock + alta de productos)
+- `UiTheme.java`     - colores, tipografías y formato de moneda compartidos
+- `RoundedPanel.java`, `RoundButton.java` - componentes con estética propia (independiente del Look&Feel del SO)
+- `CarritoItem.java` - línea del carrito de la pantalla "Vender"
 - `ApiClient.java`   - toda la comunicación HTTP con Python
 - `Json.java`        - parser/writer JSON sin dependencias
 - `Producto.java`, `Pedido.java` - modelos que reflejan el JSON del backend

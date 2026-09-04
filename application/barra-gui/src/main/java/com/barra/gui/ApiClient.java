@@ -102,6 +102,29 @@ public class ApiClient {
         return pedidoFromMap(Json.parseObject(resp.body()));
     }
 
+    /** Da de alta un producto nuevo en el catálogo (pantalla Catálogo). */
+    public Producto crearProducto(String nombre, double precio, int stock) throws IOException, InterruptedException {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("nombre", nombre);
+        body.put("precio", precio);
+        body.put("stock", stock);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/productos"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        checkOk(resp);
+
+        Map<String, Object> o = Json.parseObject(resp.body());
+        return new Producto(
+                ((Number) o.get("id")).intValue(),
+                (String) o.get("nombre"),
+                ((Number) o.get("precio")).doubleValue(),
+                ((Number) o.get("stock")).intValue());
+    }
+
     public void cambiarEstado(int pedidoId, String nuevoEstado) throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("estado", nuevoEstado);
@@ -118,12 +141,27 @@ public class ApiClient {
     @SuppressWarnings("unchecked")
     private Pedido pedidoFromMap(Object raw) {
         Map<String, Object> o = (Map<String, Object>) raw;
+
+        List<Pedido.Detalle> detalles = new ArrayList<>();
+        List<Object> detallesRaw = (List<Object>) o.get("detalles");
+        if (detallesRaw != null) {
+            for (Object d : detallesRaw) {
+                Map<String, Object> dm = (Map<String, Object>) d;
+                detalles.add(new Pedido.Detalle(
+                        ((Number) dm.get("producto_id")).intValue(),
+                        (String) dm.get("nombre_producto"),
+                        ((Number) dm.get("cantidad")).intValue(),
+                        ((Number) dm.get("subtotal")).doubleValue()));
+            }
+        }
+
         return new Pedido(
                 ((Number) o.get("id")).intValue(),
                 (String) o.get("fecha"),
                 (String) o.get("estado"),
                 ((Number) o.get("total")).doubleValue(),
-                (String) o.get("nota"));
+                (String) o.get("nota"),
+                detalles);
     }
 
     private void checkOk(HttpResponse<String> resp) throws IOException {

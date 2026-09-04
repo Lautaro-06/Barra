@@ -5,10 +5,10 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridLayout;
@@ -36,18 +36,28 @@ public class CocinaPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
         setBackground(UiTheme.FONDO);
 
-        add(construirColumna("🧑‍🍳 En preparación", columnaPreparacion));
-        add(construirColumna("✅ Listo para entregar", columnaListo));
-        add(construirColumna("📦 Entregados (últimos)", columnaEntregado));
+        add(construirColumna("En preparación", UiTheme.colorEstado("en_preparacion"), columnaPreparacion));
+        add(construirColumna("Listo para entregar", UiTheme.colorEstado("listo"), columnaListo));
+        add(construirColumna("Entregados (últimos)", UiTheme.colorEstado("entregado"), columnaEntregado));
     }
 
-    private JComponent construirColumna(String titulo, JPanel contenedor) {
+    private JComponent construirColumna(String titulo, Color indicador, JPanel contenedor) {
         contenedor.setLayout(new BoxLayout(contenedor, BoxLayout.Y_AXIS));
         contenedor.setOpaque(false);
 
+        JLabel punto = new JLabel("●");
+        punto.setForeground(indicador);
+
         JLabel label = new JLabel(titulo);
         label.setFont(UiTheme.SUBTITULO);
-        label.setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 0));
+
+        JPanel encabezado = new JPanel();
+        encabezado.setOpaque(false);
+        encabezado.setLayout(new BoxLayout(encabezado, BoxLayout.X_AXIS));
+        encabezado.setBorder(BorderFactory.createEmptyBorder(0, 4, 8, 0));
+        encabezado.add(punto);
+        encabezado.add(Box.createHorizontalStrut(6));
+        encabezado.add(label);
 
         JScrollPane scroll = new JScrollPane(contenedor);
         scroll.setBorder(null);
@@ -56,7 +66,7 @@ public class CocinaPanel extends JPanel {
 
         JPanel columna = new JPanel(new BorderLayout());
         columna.setOpaque(false);
-        columna.add(label, BorderLayout.NORTH);
+        columna.add(encabezado, BorderLayout.NORTH);
         columna.add(scroll, BorderLayout.CENTER);
         return columna;
     }
@@ -78,7 +88,7 @@ public class CocinaPanel extends JPanel {
                 .limit(10)
                 .collect(Collectors.toList());
 
-        if (enPreparacion.isEmpty()) columnaPreparacion.add(mensajeVacio("Nada en preparación 👍"));
+        if (enPreparacion.isEmpty()) columnaPreparacion.add(mensajeVacio("Nada en preparación"));
         for (Pedido p : enPreparacion) columnaPreparacion.add(crearTarjeta(p));
 
         if (listos.isEmpty()) columnaListo.add(mensajeVacio("Nada esperando entrega"));
@@ -152,10 +162,10 @@ public class CocinaPanel extends JPanel {
     private JComponent crearBotonAccion(Pedido pedido) {
         RoundButton btn;
         if ("en_preparacion".equals(pedido.estado)) {
-            btn = new RoundButton("Marcar listo ✅", UiTheme.INFO, UiTheme.INFO.darker());
+            btn = new RoundButton("Marcar listo", UiTheme.INFO, UiTheme.INFO.darker());
             btn.addActionListener(e -> cambiarEstado(pedido.id, "listo"));
         } else if ("listo".equals(pedido.estado)) {
-            btn = new RoundButton("Entregar 📦", UiTheme.EXITO, UiTheme.EXITO_OSCURO);
+            btn = new RoundButton("Entregar", UiTheme.EXITO, UiTheme.EXITO_OSCURO);
             btn.addActionListener(e -> cambiarEstado(pedido.id, "entregado"));
         } else {
             return null;
@@ -172,8 +182,7 @@ public class CocinaPanel extends JPanel {
             api.cambiarEstado(pedidoId, nuevoEstado);
             alCambiarEstado.run();
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "No se pudo actualizar el pedido:\n" + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            Toast.error(this, "No se pudo actualizar el pedido: " + ex.getMessage());
         }
     }
 

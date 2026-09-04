@@ -6,7 +6,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
@@ -40,7 +39,7 @@ public class VentaPanel extends JPanel {
     private final JLabel totalLabel = new JLabel(UiTheme.moneda(0));
     private final JTextField notaField = new JTextField();
     private final RoundButton confirmarBtn =
-            new RoundButton("Confirmar pedido ✅", UiTheme.EXITO, UiTheme.EXITO_OSCURO);
+            new RoundButton("Confirmar pedido", UiTheme.EXITO, UiTheme.EXITO_OSCURO);
 
     private final Map<Integer, CarritoItem> carrito = new LinkedHashMap<>();
 
@@ -257,7 +256,7 @@ public class VentaPanel extends JPanel {
         JLabel cantidadLbl = new JLabel(String.valueOf(item.cantidad));
         cantidadLbl.setFont(UiTheme.TEXTO_NEGRITA);
         JButton mas = botonMini("+");
-        JButton sacar = botonMini("✕");
+        JButton sacar = botonMini("x");
 
         menos.addActionListener(e -> cambiarCantidad(item.producto.id, -1));
         mas.addActionListener(e -> cambiarCantidad(item.producto.id, +1));
@@ -298,10 +297,9 @@ public class VentaPanel extends JPanel {
             notaField.setText("");
             renderizarCarrito();
             alConfirmar.run();
-            JOptionPane.showMessageDialog(this, "Pedido #" + creado.id + " enviado a cocina 🎉");
+            Toast.exito(this, "Pedido #" + creado.id + " enviado a cocina");
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "No se pudo confirmar el pedido:\n" + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            Toast.error(this, "No se pudo confirmar el pedido: " + ex.getMessage());
         } finally {
             confirmarBtn.setEnabled(!carrito.isEmpty());
         }

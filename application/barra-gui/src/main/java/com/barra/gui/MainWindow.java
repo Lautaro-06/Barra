@@ -3,20 +3,19 @@ package com.barra.gui;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Cursor;
 import java.awt.Dimension;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * MainWindow
@@ -31,6 +30,7 @@ public class MainWindow extends JFrame {
 
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel contenido = new JPanel(cardLayout);
+    private final Map<String, NavButton> botonesNav = new LinkedHashMap<>();
 
     private final VentaPanel ventaPanel = new VentaPanel(api, this::refrescarDatos);
     private final CocinaPanel cocinaPanel = new CocinaPanel(api, this::refrescarDatos);
@@ -45,6 +45,7 @@ public class MainWindow extends JFrame {
         setSize(1080, 680);
         setMinimumSize(new Dimension(860, 560));
         setLocationRelativeTo(null);
+        setIconImage(AppIcons.marcaComoImagen(64));
         getContentPane().setBackground(UiTheme.FONDO);
         setLayout(new BorderLayout());
 
@@ -55,6 +56,7 @@ public class MainWindow extends JFrame {
         contenido.add(catalogoPanel, "catalogo");
         add(contenido, BorderLayout.CENTER);
 
+        mostrarPantalla("vender");
         refrescarDatos();
 
         // Polling simple cada 4s: alcanza para que el mostrador y la cocina
@@ -71,18 +73,25 @@ public class MainWindow extends JFrame {
         sidebar.setPreferredSize(new Dimension(190, 0));
         sidebar.setBorder(BorderFactory.createEmptyBorder(20, 16, 16, 16));
 
-        JLabel marca = new JLabel("🍔 Barra");
-        marca.setFont(UiTheme.TITULO);
-        marca.setForeground(Color.WHITE);
+        JPanel marca = new JPanel();
+        marca.setOpaque(false);
+        marca.setLayout(new BoxLayout(marca, BoxLayout.X_AXIS));
         marca.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel logo = new JLabel(AppIcons.marca(30));
+        JLabel nombre = new JLabel("Barra");
+        nombre.setFont(UiTheme.TITULO);
+        nombre.setForeground(Color.WHITE);
+        nombre.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
+        marca.add(logo);
+        marca.add(nombre);
         sidebar.add(marca);
         sidebar.add(Box.createVerticalStrut(28));
 
-        sidebar.add(botonNav("🧾  Vender", "vender"));
+        sidebar.add(crearBotonNav("Vender", AppIcons.vender(Color.WHITE), "vender"));
         sidebar.add(Box.createVerticalStrut(8));
-        sidebar.add(botonNav("🧑‍🍳  Cocina", "cocina"));
+        sidebar.add(crearBotonNav("Cocina", AppIcons.cocina(Color.WHITE), "cocina"));
         sidebar.add(Box.createVerticalStrut(8));
-        sidebar.add(botonNav("📦  Catálogo", "catalogo"));
+        sidebar.add(crearBotonNav("Catálogo", AppIcons.catalogo(Color.WHITE), "catalogo"));
 
         sidebar.add(Box.createVerticalGlue());
 
@@ -101,21 +110,16 @@ public class MainWindow extends JFrame {
         return sidebar;
     }
 
-    private JButton botonNav(String texto, String card) {
-        JButton btn = new JButton(texto);
-        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-        btn.setHorizontalAlignment(SwingConstants.LEFT);
-        btn.setForeground(Color.WHITE);
-        btn.setBackground(UiTheme.SIDEBAR);
-        btn.setBorderPainted(false);
-        btn.setFocusPainted(false);
-        btn.setContentAreaFilled(false);
-        btn.setOpaque(false);
-        btn.setFont(UiTheme.TEXTO_NEGRITA);
-        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.addActionListener(e -> cardLayout.show(contenido, card));
+    private NavButton crearBotonNav(String texto, javax.swing.Icon icono, String card) {
+        NavButton btn = new NavButton(texto, icono);
+        btn.addActionListener(e -> mostrarPantalla(card));
+        botonesNav.put(card, btn);
         return btn;
+    }
+
+    private void mostrarPantalla(String card) {
+        cardLayout.show(contenido, card);
+        botonesNav.forEach((clave, boton) -> boton.setSeleccionado(clave.equals(card)));
     }
 
     private void refrescarDatos() {

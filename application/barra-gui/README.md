@@ -32,8 +32,18 @@ librería (ej. Gson), se agrega en el `pom.xml` sin tocar el resto.
 ## Importante: primero levantar el backend
 
 La GUI espera que `barra-backend` ya esté corriendo en
-http://127.0.0.1:8000 (ver README de esa carpeta). Si no lo está, la GUI
-te avisa arriba de todo: "Backend Python: SIN CONEXIÓN".
+http://127.0.0.1:8000 (ver README de esa carpeta). Si no lo está, el
+indicador de abajo del sidebar avisa "Backend caído".
+
+## Identidad visual
+
+Nada de emojis ni imágenes externas: los íconos del sidebar (y el logo/
+ícono de la ventana) son siluetas vectoriales propias dibujadas con Java2D
+(`AppIcons.java`), así se ven igual de nítidas en cualquier sistema
+operativo y a cualquier resolución. Los avisos de éxito/error usan un
+"toast" propio (`Toast.java`) en vez de `JOptionPane`, y el alta de
+productos usa un diálogo con la estética de la app en lugar del cartel
+genérico de Swing.
 
 ## Archivos
 
@@ -43,6 +53,9 @@ te avisa arriba de todo: "Backend Python: SIN CONEXIÓN".
 - `CocinaPanel.java` - pantalla "Cocina" (tablero kanban de pedidos)
 - `CatalogoPanel.java` - pantalla "Catálogo" (stock + alta de productos)
 - `UiTheme.java`     - colores, tipografías y formato de moneda compartidos
+- `AppIcons.java`    - íconos vectoriales propios (sidebar, logo, ícono de ventana)
+- `NavButton.java`   - botón del sidebar con estado activo/inactivo
+- `Toast.java`       - notificación flotante no bloqueante (reemplaza JOptionPane)
 - `RoundedPanel.java`, `RoundButton.java` - componentes con estética propia (independiente del Look&Feel del SO)
 - `CarritoItem.java` - línea del carrito de la pantalla "Vender"
 - `ApiClient.java`   - toda la comunicación HTTP con Python

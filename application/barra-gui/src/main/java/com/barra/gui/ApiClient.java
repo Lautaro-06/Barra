@@ -21,7 +21,15 @@ import java.util.Map;
 public class ApiClient {
 
     private static final String BASE_URL = "http://127.0.0.1:8000";
-    private final HttpClient http = HttpClient.newHttpClient();
+
+    // uvicorn (el backend) solo habla HTTP/1.1. El HttpClient por defecto
+    // intenta negociar HTTP/2 en cada pedido igual, y cuando el servidor lo
+    // rechaza a veces se pierde el body de los POST (uvicorn responde 422
+    // "Field required" como si no hubiera llegado nada) - forzar 1.1 evita
+    // esa negociación y el problema por completo.
+    private final HttpClient http = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
 
     /** Chequea que el backend Python esté levantado antes de mostrar la GUI. */
     public boolean healthCheck() {

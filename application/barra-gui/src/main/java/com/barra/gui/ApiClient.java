@@ -21,7 +21,17 @@ import java.util.Map;
 public class ApiClient {
 
     private static final String BASE_URL = "http://127.0.0.1:8000";
-    private final HttpClient http = HttpClient.newHttpClient();
+
+    // HttpClient.newHttpClient() (sin especificar versión) prefiere
+    // HTTP/2 por default. El backend (uvicorn/h11) solo habla HTTP/1.1,
+    // así que en el primer POST/PUT/PATCH con body el cliente intenta un
+    // upgrade a HTTP/2 que el servidor no entiende, y el body del
+    // request se pierde: FastAPI recibe la request vacía y devuelve 422
+    // "Field required". Fijar HTTP_1_1 explícitamente evita ese intento
+    // de upgrade y manda el body como corresponde.
+    private final HttpClient http = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
 
     /** Chequea que el backend Python esté levantado antes de mostrar la GUI. */
     public boolean healthCheck() {

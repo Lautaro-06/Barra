@@ -8,8 +8,7 @@ Punto clave de la arquitectura: PYTHON ES EL ÚNICO DUEÑO DEL ARCHIVO SQLITE.
 - Esto evita el problema clásico de "dos procesos escribiendo el mismo archivo
   SQLite a la vez" -> corrupción / locks eternos.
 
-Nota sobre concurrencia (se profundiza en el punto 3 del proyecto, todavía no
-implementado acá): SQLite + hilos requiere cuidado. Por eso:
+Nota sobre concurrencia (se profundiza en esta rama implementada del proyecto): SQLite + hilos requiere cuidado. Por eso:
   - check_same_thread=False (FastAPI corre cada request en un hilo del pool)
   - una única conexión reutilizada, protegida con un Lock a la hora de escribir
 Esto es la base mínima; el pool de hilos para pedidos concurrentes y el hilo

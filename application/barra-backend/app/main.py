@@ -15,7 +15,13 @@ import asyncio
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from .concurrency import pedido_executor, shutdown_executor
+
+from .concurrency import (
+    pedido_executor,
+    shutdown_executor,
+    start_stock_watcher,
+    stop_stock_watcher,
+)
 
 from .database import get_connection, init_db, write_lock
 from .models import (
@@ -42,10 +48,12 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     init_db()
+    start_stock_watcher()
 
 
 @app.on_event("shutdown")
 def on_shutdown():
+    stop_stock_watcher()
     shutdown_executor()
 
 @app.get("/health")

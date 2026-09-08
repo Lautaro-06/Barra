@@ -29,8 +29,11 @@ Documentación interactiva automática en http://127.0.0.1:8000/docs
   `app/concurrency.py`) para procesar pedidos concurrentes: `POST /pedidos`
   delega el trabajo al pool en vez de correr secuencialmente en el hilo del
   request. `write_lock` sigue protegiendo la sección crítica de stock.
-- [ ] Hilo separado de vigilancia de stock (detecta cuándo un producto baja
-  de un umbral).
+- [x] Hilo separado de vigilancia de stock (`app/concurrency.py`): cada
+  `BARRA_STOCK_CHECK_INTERVAL` segundos (default 30) recorre `producto` y
+  loguea un warning por cada uno con `stock < BARRA_STOCK_MINIMO` (default
+  5). Corre como `threading.Thread` daemon, arranca en el `startup` de la
+  app y se apaga prolijamente en el `shutdown`.
 - [ ] Hilo de backup automático de `barra.db` (copia periódica, sin depender
   de red).
 

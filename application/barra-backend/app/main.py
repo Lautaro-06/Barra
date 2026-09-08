@@ -23,6 +23,12 @@ from .concurrency import (
     stop_stock_watcher,
 )
 
+from .concurrency import (
+    pedido_executor,
+    shutdown_executor,
+    start_stock_watcher,
+    stop_stock_watcher,
+)
 from .database import get_connection, init_db, write_lock
 from .models import (
     ProductoIn,

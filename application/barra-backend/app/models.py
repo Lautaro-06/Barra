@@ -49,3 +49,10 @@ class PedidoOut(BaseModel):
 
 class EstadoIn(BaseModel):
     estado: str  # "en_preparacion" | "listo" | "entregado"
+
+
+class AlertaOut(BaseModel):
+    producto_id: int
+    nombre: str
+    stock: int
+    umbral: int

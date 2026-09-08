@@ -17,6 +17,7 @@ Documentación interactiva automática en http://127.0.0.1:8000/docs
 ## Endpoints (probando)
 
 - GET  /health
+- GET  /alertas              (snapshot de productos con stock bajo)
 - GET  /productos
 - POST /productos
 - GET  /pedidos
@@ -33,7 +34,9 @@ Documentación interactiva automática en http://127.0.0.1:8000/docs
   `BARRA_STOCK_CHECK_INTERVAL` segundos (default 30) recorre `producto` y
   loguea un warning por cada uno con `stock < BARRA_STOCK_MINIMO` (default
   5). Corre como `threading.Thread` daemon, arranca en el `startup` de la
-  app y se apaga prolijamente en el `shutdown`.
+  app y se apaga prolijamente en el `shutdown`. El snapshot del último
+  chequeo queda expuesto en `GET /alertas` (lista en memoria, con su
+  propio lock, separado de `write_lock`).
 - [ ] Hilo de backup automático de `barra.db` (copia periódica, sin depender
   de red).
 

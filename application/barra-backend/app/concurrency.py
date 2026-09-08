@@ -36,6 +36,15 @@ chequeo (lo que dejaría al hilo "sordo" ante un pedido de apagado hasta
 que termine de dormir), se usa threading.Event().wait(timeout=...): al
 apagar la app se llama a stop_stock_watcher(), que hace event.set() y
 corta la espera al instante.
+
+Además del log, cada chequeo deja un snapshot de las alertas activas en
+_alertas_activas (una lista en memoria del proceso, no en la base), que
+GET /alertas expone tal cual. Es un snapshot, no un historial: si un
+producto se repone, desaparece de la lista en el chequeo siguiente. Esa
+lista tiene su propio lock (_alertas_lock), separado de write_lock,
+porque protege una estructura de Python en memoria, no la conexión
+SQLite -> así una request a GET /alertas nunca compite por el lock que
+usan los pedidos.
 """
 
 import logging
@@ -76,6 +85,18 @@ INTERVALO_VIGILANCIA_SEGUNDOS = int(
 _stock_watch_stop_event = threading.Event()
 _stock_watch_thread: threading.Thread | None = None
 
+# Snapshot de las alertas activas según el último chequeo, para GET
+# /alertas. Lock propio: es una lista en memoria, no la conexión SQLite.
+_alertas_lock = threading.Lock()
+_alertas_activas: list[dict] = []
+
+
+def get_alertas_stock() -> list[dict]:
+    """Devuelve una copia del snapshot actual de alertas de stock bajo.
+    Se llama desde el endpoint GET /alertas."""
+    with _alertas_lock:
+        return list(_alertas_activas)
+
 
 def _vigilar_stock() -> None:
     logger.info(
@@ -87,16 +108,28 @@ def _vigilar_stock() -> None:
         conn = get_connection()
         with write_lock:
             rows = conn.execute(
-                "SELECT nombre, stock FROM producto WHERE stock < ? ORDER BY stock",
+                "SELECT id, nombre, stock FROM producto WHERE stock < ? ORDER BY stock",
                 (STOCK_MINIMO,),
             ).fetchall()
 
-        for row in rows:
+        nuevas_alertas = [
+            {
+                "producto_id": row["id"],
+                "nombre": row["nombre"],
+                "stock": row["stock"],
+                "umbral": STOCK_MINIMO,
+            }
+            for row in rows
+        ]
+        with _alertas_lock:
+            _alertas_activas[:] = nuevas_alertas
+
+        for alerta in nuevas_alertas:
             logger.warning(
                 "Stock bajo: '%s' tiene %s unidades (umbral: %s)",
-                row["nombre"],
-                row["stock"],
-                STOCK_MINIMO,
+                alerta["nombre"],
+                alerta["stock"],
+                alerta["umbral"],
             )
 
         # Espera interrumpible: si stop_stock_watcher() llama a .set(),

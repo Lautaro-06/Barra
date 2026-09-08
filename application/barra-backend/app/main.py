@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .concurrency import (
+    get_alertas_stock,
     pedido_executor,
     shutdown_executor,
     start_stock_watcher,
@@ -30,6 +31,7 @@ from .models import (
     PedidoOut,
     DetalleOut,
     EstadoIn,
+    AlertaOut,
 )
 
 app = FastAPI(title="Barra - Backend de Pedidos")
@@ -60,6 +62,18 @@ def health():
     """La GUI Java llama esto al arrancar para confirmar que el backend
     (que ella misma o el instalador ya debería tener corriendo) está vivo."""
     return {"status": "ok"}
+
+
+@app.get("/alertas", response_model=list[AlertaOut])
+def listar_alertas():
+    """
+    Snapshot de las alertas de stock bajo del último chequeo del hilo
+    stock-watcher (ver concurrency.py). No consulta la base en el
+    momento: devuelve la lista en memoria que ese hilo va actualizando
+    en segundo plano, así que responde al instante sin competir por
+    write_lock con los pedidos.
+    """
+    return get_alertas_stock()
 
 
 # ---------- Productos (catálogo) ----------

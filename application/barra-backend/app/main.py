@@ -55,7 +55,6 @@ def on_shutdown():
     stop_stock_watcher()
     shutdown_executor()
 
-
 @app.get("/health")
 def health():
     """La GUI Java llama esto al arrancar para confirmar que el backend
@@ -168,7 +167,6 @@ def _procesar_pedido(pedido: PedidoIn) -> dict:
     row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
     return _pedido_a_dict(conn, row)
 
-
 @app.post("/pedidos", response_model=PedidoOut, status_code=201)
 async def crear_pedido(pedido: PedidoIn):
     """
@@ -181,7 +179,6 @@ async def crear_pedido(pedido: PedidoIn):
     """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(pedido_executor, _procesar_pedido, pedido)
-
 
 @app.patch("/pedidos/{pedido_id}/estado", response_model=PedidoOut)
 def cambiar_estado(pedido_id: int, body: EstadoIn):

@@ -52,7 +52,7 @@ logger = logging.getLogger("barra.concurrency")
 # Cantidad de pedidos que se pueden procesar en simultáneo.
 MAX_WORKERS = 4
 
-pedido_executor = ThreadPoolExecutor(
+pedido_executor = ThreadPoolExecutor( # Crea un pool con 4 hilos fijos (mozos)
     max_workers=MAX_WORKERS,
     thread_name_prefix="pedido-worker",
 )

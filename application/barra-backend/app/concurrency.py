@@ -40,14 +40,42 @@ lista tiene su propio lock (_alertas_lock), separado de write_lock,
 porque protege una estructura de Python en memoria, no la conexión
 SQLite -> así una request a GET /alertas nunca compite por el lock que
 usan los pedidos.
+
+Punto 3 - Hilo de backup automático de barra.db
+-----------------------------------------------------------------
+Otro threading.Thread daemon, con el mismo patrón de Event que los
+anteriores. Cada BACKUP_INTERVAL_SEGUNDOS (default 4 horas) hace una
+copia de barra.db a la carpeta backups/, sin depender de red: todo
+local, con el propio filesystem del server.
+
+La copia NO se hace con un shutil.copy del archivo crudo. Se usa la API
+de backup nativa de sqlite3 (Connection.backup(destino)), que es la
+forma correcta de copiar una base que puede estar en uso: SQLite arma
+la copia página por página de forma consistente, en vez de arriesgarse
+a fotografiar el archivo a mitad de una escritura (lo que podría dejar
+una copia corrupta). Aun así, se toma write_lock durante la copia,
+mismo criterio que el resto: es la misma conexión compartida, y solo un
+hilo a la vez puede usarla.
+
+Cada backup deja dos cosas en backups/:
+  - barra_backup_AAAAMMDD_HHMMSS.db  -> copia real y restaurable.
+  - backups.log                      -> una línea de texto por evento
+    (fecha, archivo generado, resultado). Nunca se rota ni se borra.
+
+Después de cada backup exitoso se aplica retención: si hay más de
+BACKUP_MAX_COPIAS archivos barra_backup_*.db, se borran los más viejos
+(el nombre ya ordena cronológicamente).
 """
 
 import logging
 import os
+import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from pathlib import Path
 
-from .database import get_connection, write_lock
+from .database import DB_PATH, get_connection, write_lock
 
 logger = logging.getLogger("barra.concurrency")
 
@@ -152,3 +180,95 @@ def stop_stock_watcher() -> None:
     _stock_watch_stop_event.set()
     if _stock_watch_thread is not None:
         _stock_watch_thread.join(timeout=5)
+
+
+# ---------- Punto 3: hilo de backup automático de barra.db ----------
+
+BACKUP_DIR = Path(os.environ.get("BARRA_BACKUP_DIR", DB_PATH.parent / "backups"))
+BACKUP_INTERVAL_SEGUNDOS = int(
+    os.environ.get("BARRA_BACKUP_INTERVAL_SECONDS", str(4 * 60 * 60))  # 4 horas
+)
+BACKUP_MAX_COPIAS = int(os.environ.get("BARRA_BACKUP_MAX_COPIES", "5"))
+
+BACKUP_LOG_PATH = BACKUP_DIR / "backups.log"
+_BACKUP_FILENAME_FMT = "barra_backup_%Y%m%d_%H%M%S.db"
+
+_backup_stop_event = threading.Event()
+_backup_thread: threading.Thread | None = None
+
+
+def _registrar_evento_backup(mensaje: str) -> None:
+    """Agrega una línea a backups/backups.log. Nunca se rota ni se borra:
+    es el historial de texto de la actividad del hilo, separado de las
+    copias .db en sí."""
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    with open(BACKUP_LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(f"{timestamp} | {mensaje}\n")
+
+
+def _aplicar_retencion() -> None:
+    """Si hay más de BACKUP_MAX_COPIAS archivos de backup, borra los más
+    viejos. El nombre timestamped ya ordena cronológicamente."""
+    backups = sorted(BACKUP_DIR.glob("barra_backup_*.db"))
+    de_mas = max(0, len(backups) - BACKUP_MAX_COPIAS)
+    for viejo in backups[:de_mas]:
+        viejo.unlink()
+        logger.info("Backup viejo eliminado por retención: %s", viejo.name)
+
+
+def _hacer_backup() -> None:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    nombre = datetime.now().strftime(_BACKUP_FILENAME_FMT)
+    destino = BACKUP_DIR / nombre
+
+    try:
+        # API de backup nativa de sqlite3: copia página por página de
+        # forma consistente, a diferencia de copiar el archivo crudo
+        # mientras puede estar siendo escrito.
+        conn = get_connection()
+        with write_lock:
+            destino_conn = sqlite3.connect(destino)
+            try:
+                conn.backup(destino_conn)
+            finally:
+                destino_conn.close()
+    except Exception as exc:
+        logger.error("Falló el backup de barra.db: %s", exc)
+        _registrar_evento_backup(f"ERROR | {exc}")
+        return
+
+    tamano = destino.stat().st_size
+    logger.info("Backup de barra.db creado: %s (%s bytes)", nombre, tamano)
+    _registrar_evento_backup(f"OK | {nombre} | {tamano} bytes")
+    _aplicar_retencion()
+
+
+def _vigilar_backup() -> None:
+    logger.info(
+        "Hilo de backup arrancado (intervalo=%ss, retención=%s copias, dir=%s)",
+        BACKUP_INTERVAL_SEGUNDOS,
+        BACKUP_MAX_COPIAS,
+        BACKUP_DIR,
+    )
+    while not _backup_stop_event.is_set():
+        _hacer_backup()
+        # Espera interrumpible, mismo criterio que el hilo de stock.
+        _backup_stop_event.wait(timeout=BACKUP_INTERVAL_SEGUNDOS)
+
+
+def start_backup_thread() -> None:
+    """Arranca el hilo de backup. Se llama en el startup de la app. Hace
+    un backup inmediato al arrancar, sin esperar el primer intervalo."""
+    global _backup_thread
+    _backup_stop_event.clear()
+    _backup_thread = threading.Thread(
+        target=_vigilar_backup, name="db-backup", daemon=True
+    )
+    _backup_thread.start()
+
+
+def stop_backup_thread() -> None:
+    """Corta el hilo de backup prolijamente. Se llama en el shutdown."""
+    _backup_stop_event.set()
+    if _backup_thread is not None:
+        _backup_thread.join(timeout=5)

@@ -37,8 +37,14 @@ Documentación interactiva automática en http://127.0.0.1:8000/docs
   app y se apaga prolijamente en el `shutdown`. El snapshot del último
   chequeo queda expuesto en `GET /alertas` (lista en memoria, con su
   propio lock, separado de `write_lock`).
-- [ ] Hilo de backup automático de `barra.db` (copia periódica, sin depender
-  de red).
+- [x] Hilo de backup automático de `barra.db` (`app/concurrency.py`): cada
+  `BARRA_BACKUP_INTERVAL_SECONDS` segundos (default 14400 = 4hs) copia la
+  base a `backups/` usando la API de backup nativa de `sqlite3`
+  (`Connection.backup`), sin depender de red. Cada copia genera un archivo
+  `barra_backup_AAAAMMDD_HHMMSS.db` y una línea en `backups/backups.log`.
+  Retiene como máximo `BARRA_BACKUP_MAX_COPIES` copias (default 5),
+  borrando las más viejas. La carpeta `backups/` se crea sola y está en
+  `.gitignore` (son archivos de runtime, no código fuente).
 
 ## Qué falta (próximos puntos del proyecto)
 

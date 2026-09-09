@@ -20,7 +20,9 @@ from .concurrency import (
     get_alertas_stock,
     pedido_executor,
     shutdown_executor,
+    start_backup_thread,
     start_stock_watcher,
+    stop_backup_thread,
     stop_stock_watcher,
 )
 
@@ -57,10 +59,12 @@ app.add_middleware(
 def on_startup():
     init_db()
     start_stock_watcher()
+    start_backup_thread()
 
 
 @app.on_event("shutdown")
 def on_shutdown():
+    stop_backup_thread()
     stop_stock_watcher()
     shutdown_executor()
 

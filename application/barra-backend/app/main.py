@@ -26,6 +26,7 @@ from .concurrency import (
     stop_stock_watcher,
 )
 from .database import get_connection, init_db, write_lock
+from .secrets import SecretConfigurationError, encrypt_secret
 from .models import (
     ProductoIn,
     ProductoOut,
@@ -76,21 +77,92 @@ def health():
 
 # ---------- Configuración (panel de Admin) ----------
 
+def _configuracion_a_dict(row) -> dict:
+    datos = dict(row)
+    datos["email_habilitado"] = bool(datos["email_habilitado"])
+    datos["telegram_habilitado"] = bool(datos["telegram_habilitado"])
+    datos["resumen_diario_habilitado"] = bool(datos["resumen_diario_habilitado"])
+    datos["smtp_password_configurada"] = bool(datos["smtp_password_cifrada"])
+    datos["telegram_token_configurado"] = bool(datos["telegram_token_cifrado"])
+    datos.pop("smtp_password_cifrada", None)
+    datos.pop("telegram_token_cifrado", None)
+    return datos
+
+
 @app.get("/configuracion", response_model=ConfiguracionOut)
 def obtener_configuracion():
     conn = get_connection()
     row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
-    return dict(row)
+    return _configuracion_a_dict(row)
 
 
+@app.post("/configuracion", response_model=ConfiguracionOut)
 @app.put("/configuracion", response_model=ConfiguracionOut)
 def actualizar_configuracion(config: ConfiguracionIn):
     conn = get_connection()
     with write_lock:
-        conn.execute("UPDATE configuracion SET nombre_local = ? WHERE id = 1", (config.nombre_local,))
+        actual = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
+        campos_recibidos = config.model_fields_set
+        valores = {
+            "nombre_local": actual["nombre_local"],
+            "umbral_stock_global": actual["umbral_stock_global"],
+            "email_habilitado": actual["email_habilitado"],
+            "email_destino": actual["email_destino"],
+            "smtp_host": actual["smtp_host"],
+            "smtp_port": actual["smtp_port"],
+            "smtp_usuario": actual["smtp_usuario"],
+            "smtp_password_cifrada": actual["smtp_password_cifrada"],
+            "telegram_habilitado": actual["telegram_habilitado"],
+            "telegram_chat_id": actual["telegram_chat_id"],
+            "telegram_token_cifrado": actual["telegram_token_cifrado"],
+            "resumen_diario_habilitado": actual["resumen_diario_habilitado"],
+            "resumen_diario_hora": actual["resumen_diario_hora"],
+        }
+
+        campos_sin_secretos = (
+            "nombre_local", "umbral_stock_global", "email_habilitado",
+            "email_destino", "smtp_host", "smtp_port", "smtp_usuario",
+            "telegram_habilitado", "telegram_chat_id",
+            "resumen_diario_habilitado", "resumen_diario_hora",
+        )
+        for campo in campos_sin_secretos:
+            if campo in campos_recibidos:
+                valor = getattr(config, campo)
+                valores[campo] = int(valor) if isinstance(valor, bool) else valor
+
+        if "smtp_password" in campos_recibidos:
+            try:
+                valores["smtp_password_cifrada"] = (
+                    encrypt_secret(config.smtp_password)
+                    if config.smtp_password
+                    else None
+                )
+            except SecretConfigurationError as exc:
+                raise HTTPException(503, str(exc)) from exc
+        if "telegram_token" in campos_recibidos:
+            try:
+                valores["telegram_token_cifrado"] = (
+                    encrypt_secret(config.telegram_token)
+                    if config.telegram_token
+                    else None
+                )
+            except SecretConfigurationError as exc:
+                raise HTTPException(503, str(exc)) from exc
+
+        conn.execute(
+            """UPDATE configuracion SET
+               nombre_local = ?, umbral_stock_global = ?,
+               email_habilitado = ?, email_destino = ?, smtp_host = ?,
+               smtp_port = ?, smtp_usuario = ?, smtp_password_cifrada = ?,
+               telegram_habilitado = ?, telegram_chat_id = ?,
+               telegram_token_cifrado = ?, resumen_diario_habilitado = ?,
+               resumen_diario_hora = ?
+               WHERE id = 1""",
+            tuple(valores.values()),
+        )
         conn.commit()
     row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
-    return dict(row)
+    return _configuracion_a_dict(row)
 @app.get("/alertas", response_model=list[AlertaOut])
 def listar_alertas():
     """

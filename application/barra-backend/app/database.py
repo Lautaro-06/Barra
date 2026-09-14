@@ -93,8 +93,20 @@ def init_db() -> None:
         );
 
         CREATE TABLE IF NOT EXISTS configuracion (
-            id            INTEGER PRIMARY KEY CHECK (id = 1),
-            nombre_local  TEXT NOT NULL DEFAULT 'Mi local'
+            id                         INTEGER PRIMARY KEY CHECK (id = 1),
+            nombre_local               TEXT NOT NULL DEFAULT 'Mi local',
+            umbral_stock_global        INTEGER NOT NULL DEFAULT 5,
+            email_habilitado           INTEGER NOT NULL DEFAULT 0,
+            email_destino              TEXT,
+            smtp_host                  TEXT,
+            smtp_port                  INTEGER NOT NULL DEFAULT 587,
+            smtp_usuario               TEXT,
+            smtp_password_cifrada      TEXT,
+            telegram_habilitado        INTEGER NOT NULL DEFAULT 0,
+            telegram_chat_id           TEXT,
+            telegram_token_cifrado     TEXT,
+            resumen_diario_habilitado  INTEGER NOT NULL DEFAULT 0,
+            resumen_diario_hora        TEXT NOT NULL DEFAULT '23:00'
         );
         """
     )
@@ -104,6 +116,18 @@ def init_db() -> None:
     # así no hace falta borrar barra.db para actualizar.
     _agregar_columna_si_falta(conn, "producto", "disponible", "disponible INTEGER NOT NULL DEFAULT 1")
     _agregar_columna_si_falta(conn, "pedido", "cuenta_id", "cuenta_id INTEGER REFERENCES cuenta(id)")
+    _agregar_columna_si_falta(conn, "configuracion", "umbral_stock_global", "umbral_stock_global INTEGER NOT NULL DEFAULT 5")
+    _agregar_columna_si_falta(conn, "configuracion", "email_habilitado", "email_habilitado INTEGER NOT NULL DEFAULT 0")
+    _agregar_columna_si_falta(conn, "configuracion", "email_destino", "email_destino TEXT")
+    _agregar_columna_si_falta(conn, "configuracion", "smtp_host", "smtp_host TEXT")
+    _agregar_columna_si_falta(conn, "configuracion", "smtp_port", "smtp_port INTEGER NOT NULL DEFAULT 587")
+    _agregar_columna_si_falta(conn, "configuracion", "smtp_usuario", "smtp_usuario TEXT")
+    _agregar_columna_si_falta(conn, "configuracion", "smtp_password_cifrada", "smtp_password_cifrada TEXT")
+    _agregar_columna_si_falta(conn, "configuracion", "telegram_habilitado", "telegram_habilitado INTEGER NOT NULL DEFAULT 0")
+    _agregar_columna_si_falta(conn, "configuracion", "telegram_chat_id", "telegram_chat_id TEXT")
+    _agregar_columna_si_falta(conn, "configuracion", "telegram_token_cifrado", "telegram_token_cifrado TEXT")
+    _agregar_columna_si_falta(conn, "configuracion", "resumen_diario_habilitado", "resumen_diario_habilitado INTEGER NOT NULL DEFAULT 0")
+    _agregar_columna_si_falta(conn, "configuracion", "resumen_diario_hora", "resumen_diario_hora TEXT NOT NULL DEFAULT '23:00'")
     conn.commit()
 
     # Semilla de datos para poder probar la GUI Java desde el primer día

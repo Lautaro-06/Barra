@@ -88,10 +88,36 @@ class CuentaOut(BaseModel):
 
 class ConfiguracionOut(BaseModel):
     nombre_local: str
+    umbral_stock_global: int
+    email_habilitado: bool
+    email_destino: str | None
+    smtp_host: str | None
+    smtp_port: int
+    smtp_usuario: str | None
+    smtp_password_configurada: bool
+    telegram_habilitado: bool
+    telegram_chat_id: str | None
+    telegram_token_configurado: bool
+    resumen_diario_habilitado: bool
+    resumen_diario_hora: str
 
 
 class ConfiguracionIn(BaseModel):
     nombre_local: str = Field(min_length=1)
+    umbral_stock_global: int = Field(ge=0, default=5)
+    email_habilitado: bool = False
+    email_destino: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_usuario: str | None = None
+    smtp_password: str | None = None
+    telegram_habilitado: bool = False
+    telegram_chat_id: str | None = None
+    telegram_token: str | None = None
+    resumen_diario_habilitado: bool = False
+    resumen_diario_hora: str = "23:00"
+
+
 class AlertaOut(BaseModel):
     producto_id: int
     nombre: str

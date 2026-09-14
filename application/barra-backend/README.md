@@ -19,6 +19,7 @@ Documentación interactiva automática en http://127.0.0.1:8000/docs
 - GET  /health
 - GET  /configuracion
 - PUT  /configuracion        (nombre del local - panel de Admin)
+- GET  /alertas              (snapshot de productos con stock bajo)
 - GET  /productos
 - POST /productos
 - PATCH /productos/{id}      (nombre/precio/stock/disponible - panel de Admin)
@@ -38,10 +39,29 @@ producto sin perder el conteo (ej. "hoy no hay pescado" aunque quede stock
 cargado). Un pedido a un producto no disponible, o sin suficiente stock,
 se rechaza con 400.
 
+## Concurrencia (rama app/concurrence)
+
+- [x] Pool de hilos real (`concurrent.futures.ThreadPoolExecutor`, ver
+  `app/concurrency.py`) para procesar pedidos concurrentes: `POST /pedidos`
+  delega el trabajo al pool en vez de correr secuencialmente en el hilo del
+  request. `write_lock` sigue protegiendo la sección crítica de stock.
+- [x] Hilo separado de vigilancia de stock (`app/concurrency.py`): cada
+  `BARRA_STOCK_CHECK_INTERVAL` segundos (default 30) recorre `producto` y
+  loguea un warning por cada uno con `stock < BARRA_STOCK_MINIMO` (default
+  5). Corre como `threading.Thread` daemon, arranca en el `startup` de la
+  app y se apaga prolijamente en el `shutdown`. El snapshot del último
+  chequeo queda expuesto en `GET /alertas` (lista en memoria, con su
+  propio lock, separado de `write_lock`).
+- [x] Hilo de backup automático de `barra.db` (`app/concurrency.py`): cada
+  `BARRA_BACKUP_INTERVAL_SECONDS` segundos (default 14400 = 4hs) copia la
+  base a `backups/` usando la API de backup nativa de `sqlite3`
+  (`Connection.backup`), sin depender de red. Cada copia genera un archivo
+  `barra_backup_AAAAMMDD_HHMMSS.db` y una línea en `backups/backups.log`.
+  Retiene como máximo `BARRA_BACKUP_MAX_COPIES` copias (default 5),
+  borrando las más viejas. La carpeta `backups/` se crea sola y está en
+  `.gitignore` (son archivos de runtime, no código fuente).
+
 ## Qué falta (próximos puntos del proyecto)
 
-- Punto 3: pool de hilos real para pedidos concurrentes + hilo de alertas
-  de stock + hilo de backup. Hoy `write_lock` ya aísla la sección crítica,
-  pero el procesamiento sigue siendo secuencial (uvicorn en un solo worker).
 - Persistir configuración de mail/Telegram del dueño.
 - Empaquetado con PyInstaller (punto 1, más adelante).

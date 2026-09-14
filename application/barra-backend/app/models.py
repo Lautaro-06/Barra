@@ -92,3 +92,8 @@ class ConfiguracionOut(BaseModel):
 
 class ConfiguracionIn(BaseModel):
     nombre_local: str = Field(min_length=1)
+class AlertaOut(BaseModel):
+    producto_id: int
+    nombre: str
+    stock: int
+    umbral: int

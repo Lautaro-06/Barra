@@ -11,10 +11,20 @@ Correr con:
 La GUI Java (ver ApiClient.java) apunta a http://127.0.0.1:8000
 """
 
+import asyncio
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .concurrency import (
+    get_alertas_stock,
+    pedido_executor,
+    shutdown_executor,
+    start_backup_thread,
+    start_stock_watcher,
+    stop_backup_thread,
+    stop_stock_watcher,
+)
 from .database import get_connection, init_db, write_lock
 from .models import (
     ProductoIn,
@@ -29,6 +39,7 @@ from .models import (
     CuentaOut,
     ConfiguracionIn,
     ConfiguracionOut,
+    AlertaOut,
 )
 
 app = FastAPI(title="Barra - Backend de Pedidos")
@@ -46,7 +57,15 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     init_db()
+    start_stock_watcher()
+    start_backup_thread()
 
+
+@app.on_event("shutdown")
+def on_shutdown():
+    stop_backup_thread()
+    stop_stock_watcher()
+    shutdown_executor()
 
 @app.get("/health")
 def health():
@@ -72,6 +91,16 @@ def actualizar_configuracion(config: ConfiguracionIn):
         conn.commit()
     row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
     return dict(row)
+@app.get("/alertas", response_model=list[AlertaOut])
+def listar_alertas():
+    """
+    Snapshot de las alertas de stock bajo del último chequeo del hilo
+    stock-watcher (ver concurrency.py). No consulta la base en el
+    momento: devuelve la lista en memoria que ese hilo va actualizando
+    en segundo plano, así que responde al instante sin competir por
+    write_lock con los pedidos.
+    """
+    return get_alertas_stock()
 
 
 # ---------- Productos (catálogo) ----------
@@ -357,12 +386,32 @@ def listar_pedidos():
 @app.post("/pedidos", response_model=PedidoOut, status_code=201)
 def crear_pedido(pedido: PedidoIn):
     """Pedido de mostrador/para llevar, sin mesa asociada."""
+def _procesar_pedido(pedido: PedidoIn) -> dict:
+    """
+    Registra un pedido y descuenta stock. Corre dentro de un worker del
+    pedido_executor (punto 1: pool de hilos real), nunca en el hilo del
+    event loop de FastAPI. La sección crítica sigue protegida por
+    write_lock: varios workers pueden estar procesando pedidos distintos
+    al mismo tiempo, pero solo uno a la vez toca la base.
+    """
     conn = get_connection()
     with write_lock:
         pedido_id = _insertar_pedido(conn, pedido, cuenta_id=None)
     row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
     return _pedido_a_dict(conn, row)
 
+@app.post("/pedidos", response_model=PedidoOut, status_code=201)
+async def crear_pedido(pedido: PedidoIn):
+    """
+    Punto de entrada HTTP. No procesa nada acá: delega el trabajo al
+    pedido_executor (ThreadPoolExecutor real, ver concurrency.py) y espera
+    el resultado sin bloquear el event loop. Si llegan varios pedidos a
+    la vez, cada uno se ejecuta en un worker distinto del pool (hasta
+    MAX_WORKERS en simultáneo); el resto espera en la cola interna del
+    executor.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(pedido_executor, _procesar_pedido, pedido)
 
 @app.patch("/pedidos/{pedido_id}/estado", response_model=PedidoOut)
 def cambiar_estado(pedido_id: int, body: EstadoIn):

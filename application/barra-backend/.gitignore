@@ -1,0 +1,10 @@
+# Backups generados en runtime por el hilo db-backup (concurrency.py).
+# No es código fuente: se recrean solos al arrancar el server.
+backups/
+
+# Entorno virtual de Python
+venv/
+
+# Bytecode compilado
+__pycache__/
+*.pyc

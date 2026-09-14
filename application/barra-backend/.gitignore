@@ -6,5 +6,5 @@ backups/
 venv/
 
 # Bytecode compilado
-__pycache__/
+barra-backend/app/__pycache__/
 *.pyc

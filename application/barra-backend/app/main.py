@@ -41,6 +41,8 @@ from .models import (
     ConfiguracionIn,
     ConfiguracionOut,
     AlertaOut,
+    AdminIn,
+    AdminOut,
 )
 
 app = FastAPI(title="Barra - Backend de Pedidos")
@@ -163,6 +165,31 @@ def actualizar_configuracion(config: ConfiguracionIn):
         conn.commit()
     row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
     return _configuracion_a_dict(row)
+@app.get("/admin", response_model=AdminOut)
+def obtener_admin():
+    """Datos del dueño del local (nombre, email de contacto, teléfono).
+    Se completan una sola vez desde el panel de Admin y se usan como
+    valor por defecto de email_destino cuando se habilite el envío de
+    alertas/resumen diario, si ese campo todavía no fue definido en
+    /configuracion."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM admin WHERE id = 1").fetchone()
+    return dict(row)
+
+
+@app.put("/admin", response_model=AdminOut)
+def actualizar_admin(datos: AdminIn):
+    conn = get_connection()
+    with write_lock:
+        conn.execute(
+            "UPDATE admin SET nombre_dueno = ?, email_dueno = ?, telefono = ? WHERE id = 1",
+            (datos.nombre_dueno, datos.email_dueno, datos.telefono),
+        )
+        conn.commit()
+    row = conn.execute("SELECT * FROM admin WHERE id = 1").fetchone()
+    return dict(row)
+
+
 @app.get("/alertas", response_model=list[AlertaOut])
 def listar_alertas():
     """
@@ -455,9 +482,6 @@ def listar_pedidos():
     return [_pedido_a_dict(conn, r) for r in rows]
 
 
-@app.post("/pedidos", response_model=PedidoOut, status_code=201)
-def crear_pedido(pedido: PedidoIn):
-    """Pedido de mostrador/para llevar, sin mesa asociada."""
 def _procesar_pedido(pedido: PedidoIn) -> dict:
     """
     Registra un pedido y descuenta stock. Corre dentro de un worker del
@@ -475,6 +499,8 @@ def _procesar_pedido(pedido: PedidoIn) -> dict:
 @app.post("/pedidos", response_model=PedidoOut, status_code=201)
 async def crear_pedido(pedido: PedidoIn):
     """
+    Pedido de mostrador/para llevar, sin mesa asociada.
+
     Punto de entrada HTTP. No procesa nada acá: delega el trabajo al
     pedido_executor (ThreadPoolExecutor real, ver concurrency.py) y espera
     el resultado sin bloquear el event loop. Si llegan varios pedidos a

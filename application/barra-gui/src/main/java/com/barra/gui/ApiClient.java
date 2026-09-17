@@ -73,6 +73,34 @@ public class ApiClient {
         return new Configuracion((String) o.get("nombre_local"));
     }
 
+    // ---------- Datos del dueño (Admin) ----------
+
+    public Admin obtenerAdmin() throws IOException, InterruptedException {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/admin"))
+                .GET()
+                .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        checkOk(resp);
+        return adminFromMap(Json.parseObject(resp.body()));
+    }
+
+    public Admin actualizarAdmin(String nombreDueno, String emailDueno, String telefono) throws IOException, InterruptedException {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("nombre_dueno", nombreDueno);
+        body.put("email_dueno", emailDueno);
+        body.put("telefono", telefono);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/admin"))
+                .header("Content-Type", "application/json")
+                .method("PUT", HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        checkOk(resp);
+        return adminFromMap(Json.parseObject(resp.body()));
+    }
+
     // ---------- Productos (catálogo / admin) ----------
 
     public List<Producto> listarProductos() throws IOException, InterruptedException {
@@ -275,6 +303,15 @@ public class ApiClient {
         body.put("nota", nota);
         body.put("detalles", detallesJson);
         return body;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Admin adminFromMap(Object raw) {
+        Map<String, Object> o = (Map<String, Object>) raw;
+        return new Admin(
+                (String) o.get("nombre_dueno"),
+                (String) o.get("email_dueno"),
+                (String) o.get("telefono"));
     }
 
     @SuppressWarnings("unchecked")

@@ -32,6 +32,18 @@ class ProductoPatch(BaseModel):
     disponible: bool | None = None
 
 
+class AdminOut(BaseModel):
+    nombre_dueno: str
+    email_dueno: str
+    telefono: str | None
+
+
+class AdminIn(BaseModel):
+    nombre_dueno: str = Field(min_length=1)
+    email_dueno: str = Field(min_length=1)
+    telefono: str | None = None
+
+
 class DetalleIn(BaseModel):
     producto_id: int
     cantidad: int = Field(gt=0)

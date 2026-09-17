@@ -59,7 +59,15 @@ def init_db() -> None:
             nombre      TEXT NOT NULL,
             precio      REAL NOT NULL,
             stock       INTEGER NOT NULL DEFAULT 0,
-            disponible  INTEGER NOT NULL DEFAULT 1
+            disponible  INTEGER NOT NULL DEFAULT 1,
+            umbral_stock INTEGER DEFAULT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS admin (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre_dueno TEXT NOT NULL,
+            email_dueno TEXT NOT NULL,
+            telefono TEXT
         );
 
         CREATE TABLE IF NOT EXISTS mesa (
@@ -102,9 +110,6 @@ def init_db() -> None:
             smtp_port                  INTEGER NOT NULL DEFAULT 587,
             smtp_usuario               TEXT,
             smtp_password_cifrada      TEXT,
-            telegram_habilitado        INTEGER NOT NULL DEFAULT 0,
-            telegram_chat_id           TEXT,
-            telegram_token_cifrado     TEXT,
             resumen_diario_habilitado  INTEGER NOT NULL DEFAULT 0,
             resumen_diario_hora        TEXT NOT NULL DEFAULT '23:00'
         );
@@ -154,4 +159,13 @@ def init_db() -> None:
     cur = conn.execute("SELECT COUNT(*) FROM configuracion")
     if cur.fetchone()[0] == 0:
         conn.execute("INSERT INTO configuracion (id, nombre_local) VALUES (1, 'Mi local')")
+        conn.commit()
+
+    # Fila única (id=1) con los datos del dueño del local, mismo patrón
+    # que configuracion. Se completa desde el panel de Admin.
+    cur = conn.execute("SELECT COUNT(*) FROM admin")
+    if cur.fetchone()[0] == 0:
+        conn.execute(
+            "INSERT INTO admin (id, nombre_dueno, email_dueno) VALUES (1, '', '')"
+        )
         conn.commit()

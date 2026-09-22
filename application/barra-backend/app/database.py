@@ -120,6 +120,7 @@ def init_db() -> None:
     # Migraciones para bases de datos creadas antes de sumar mesas/cuentas -
     # así no hace falta borrar barra.db para actualizar.
     _agregar_columna_si_falta(conn, "producto", "disponible", "disponible INTEGER NOT NULL DEFAULT 1")
+    _agregar_columna_si_falta(conn, "producto", "umbral_stock", "umbral_stock INTEGER DEFAULT NULL")
     _agregar_columna_si_falta(conn, "pedido", "cuenta_id", "cuenta_id INTEGER REFERENCES cuenta(id)")
     _agregar_columna_si_falta(conn, "configuracion", "umbral_stock_global", "umbral_stock_global INTEGER NOT NULL DEFAULT 5")
     _agregar_columna_si_falta(conn, "configuracion", "email_habilitado", "email_habilitado INTEGER NOT NULL DEFAULT 0")
@@ -128,9 +129,6 @@ def init_db() -> None:
     _agregar_columna_si_falta(conn, "configuracion", "smtp_port", "smtp_port INTEGER NOT NULL DEFAULT 587")
     _agregar_columna_si_falta(conn, "configuracion", "smtp_usuario", "smtp_usuario TEXT")
     _agregar_columna_si_falta(conn, "configuracion", "smtp_password_cifrada", "smtp_password_cifrada TEXT")
-    _agregar_columna_si_falta(conn, "configuracion", "telegram_habilitado", "telegram_habilitado INTEGER NOT NULL DEFAULT 0")
-    _agregar_columna_si_falta(conn, "configuracion", "telegram_chat_id", "telegram_chat_id TEXT")
-    _agregar_columna_si_falta(conn, "configuracion", "telegram_token_cifrado", "telegram_token_cifrado TEXT")
     _agregar_columna_si_falta(conn, "configuracion", "resumen_diario_habilitado", "resumen_diario_habilitado INTEGER NOT NULL DEFAULT 0")
     _agregar_columna_si_falta(conn, "configuracion", "resumen_diario_hora", "resumen_diario_hora TEXT NOT NULL DEFAULT '23:00'")
     conn.commit()

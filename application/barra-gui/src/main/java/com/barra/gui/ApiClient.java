@@ -137,13 +137,19 @@ public class ApiClient {
         return pedidos;
     }
 
-    /** Da de alta un producto nuevo (panel de Admin). */
+    /** Da de alta un producto nuevo (panel de Admin), sin umbral propio (usa el global). */
     public Producto crearProducto(String nombre, double precio, int stock, boolean disponible) throws IOException, InterruptedException {
+        return crearProducto(nombre, precio, stock, disponible, null);
+    }
+
+    /** Da de alta un producto nuevo (panel de Admin). umbralStock en null = usa el umbral global. */
+    public Producto crearProducto(String nombre, double precio, int stock, boolean disponible, Integer umbralStock) throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nombre", nombre);
         body.put("precio", precio);
         body.put("stock", stock);
         body.put("disponible", disponible);
+        body.put("umbral_stock", umbralStock);
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/productos"))
@@ -155,13 +161,39 @@ public class ApiClient {
         return productoFromMap(Json.parseObject(resp.body()));
     }
 
-    /** Edita nombre/precio/stock/disponibilidad de un producto existente (panel de Admin). */
+    /** Edita nombre/precio/stock/disponibilidad, sin tocar el umbral propio del producto. */
     public Producto editarProducto(int id, String nombre, double precio, int stock, boolean disponible) throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nombre", nombre);
         body.put("precio", precio);
         body.put("stock", stock);
         body.put("disponible", disponible);
+        // umbral_stock deliberadamente NO va en el body: el backend solo
+        // lo pisa si la clave viene presente (ver ProductoPatch/model_fields_set
+        // del lado Python), así que omitirla deja el umbral propio como estaba.
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/productos/" + id))
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        checkOk(resp);
+        return productoFromMap(Json.parseObject(resp.body()));
+    }
+
+    /**
+     * Edita nombre/precio/stock/disponibilidad y el umbral propio del
+     * producto. umbralStock en null limpia el override y vuelve a usar el
+     * umbral global de configuracion.
+     */
+    public Producto editarProducto(int id, String nombre, double precio, int stock, boolean disponible, Integer umbralStock) throws IOException, InterruptedException {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("nombre", nombre);
+        body.put("precio", precio);
+        body.put("stock", stock);
+        body.put("disponible", disponible);
+        body.put("umbral_stock", umbralStock);
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/productos/" + id))
@@ -317,12 +349,15 @@ public class ApiClient {
     @SuppressWarnings("unchecked")
     private Producto productoFromMap(Object raw) {
         Map<String, Object> o = (Map<String, Object>) raw;
+        Object umbralRaw = o.get("umbral_stock");
+        Integer umbralStock = umbralRaw == null ? null : ((Number) umbralRaw).intValue();
         return new Producto(
                 ((Number) o.get("id")).intValue(),
                 (String) o.get("nombre"),
                 ((Number) o.get("precio")).doubleValue(),
                 ((Number) o.get("stock")).intValue(),
-                Boolean.TRUE.equals(o.get("disponible")));
+                Boolean.TRUE.equals(o.get("disponible")),
+                umbralStock);
     }
 
     @SuppressWarnings("unchecked")

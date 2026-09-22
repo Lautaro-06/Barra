@@ -7,13 +7,16 @@ public class Producto {
     public final double precio;
     public final int stock;
     public final boolean disponible;
+    /** Umbral propio del producto. null = usa el umbral global de configuracion. */
+    public final Integer umbralStock;
 
-    public Producto(int id, String nombre, double precio, int stock, boolean disponible) {
+    public Producto(int id, String nombre, double precio, int stock, boolean disponible, Integer umbralStock) {
         this.id = id;
         this.nombre = nombre;
         this.precio = precio;
         this.stock = stock;
         this.disponible = disponible;
+        this.umbralStock = umbralStock;
     }
 
     @Override

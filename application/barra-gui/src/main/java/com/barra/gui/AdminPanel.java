@@ -98,4 +98,8 @@ public class AdminPanel extends JPanel {
     public void setConfiguracion(Configuracion configuracion) {
         configuracionPanel.setConfiguracion(configuracion);
     }
+
+    public void setAdmin(Admin admin) {
+        configuracionPanel.setAdmin(admin);
+    }
 }

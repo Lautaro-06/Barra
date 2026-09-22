@@ -14,6 +14,7 @@ class ProductoOut(BaseModel):
     precio: float
     stock: int
     disponible: bool
+    umbral_stock: int | None = None
 
 
 class ProductoIn(BaseModel):
@@ -21,15 +22,24 @@ class ProductoIn(BaseModel):
     precio: float = Field(gt=0)
     stock: int = Field(ge=0, default=0)
     disponible: bool = True
+    umbral_stock: int | None = Field(default=None, ge=0)
 
 
 class ProductoPatch(BaseModel):
     """Edición desde el panel de Admin: todos los campos son opcionales,
-    solo se pisa lo que venga seteado (ver PATCH /productos/{id})."""
+    solo se pisa lo que venga seteado (ver PATCH /productos/{id}).
+
+    umbral_stock es un caso especial: a diferencia de los demás campos,
+    null es un valor válido y con significado propio ("usar el umbral
+    global de configuracion"), no solo "no lo mandé". Por eso el endpoint
+    no puede usar el mismo truco de "if cambios.X is not None" que usa
+    para el resto - necesita mirar model_fields_set para distinguir
+    "no vino en el body" de "vino explícitamente en null"."""
     nombre: str | None = None
     precio: float | None = Field(default=None, gt=0)
     stock: int | None = Field(default=None, ge=0)
     disponible: bool | None = None
+    umbral_stock: int | None = Field(default=None, ge=0)
 
 
 class AdminOut(BaseModel):
@@ -107,9 +117,6 @@ class ConfiguracionOut(BaseModel):
     smtp_port: int
     smtp_usuario: str | None
     smtp_password_configurada: bool
-    telegram_habilitado: bool
-    telegram_chat_id: str | None
-    telegram_token_configurado: bool
     resumen_diario_habilitado: bool
     resumen_diario_hora: str
 
@@ -123,9 +130,6 @@ class ConfiguracionIn(BaseModel):
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_usuario: str | None = None
     smtp_password: str | None = None
-    telegram_habilitado: bool = False
-    telegram_chat_id: str | None = None
-    telegram_token: str | None = None
     resumen_diario_habilitado: bool = False
     resumen_diario_hora: str = "23:00"
 

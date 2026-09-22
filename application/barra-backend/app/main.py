@@ -12,6 +12,7 @@ La GUI Java (ver ApiClient.java) apunta a http://127.0.0.1:8000
 """
 
 import asyncio
+import re
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -79,16 +80,42 @@ def health():
 
 # ---------- Configuración (panel de Admin) ----------
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 def _configuracion_a_dict(row) -> dict:
     datos = dict(row)
     datos["email_habilitado"] = bool(datos["email_habilitado"])
-    datos["telegram_habilitado"] = bool(datos["telegram_habilitado"])
     datos["resumen_diario_habilitado"] = bool(datos["resumen_diario_habilitado"])
     datos["smtp_password_configurada"] = bool(datos["smtp_password_cifrada"])
-    datos["telegram_token_configurado"] = bool(datos["telegram_token_cifrado"])
     datos.pop("smtp_password_cifrada", None)
-    datos.pop("telegram_token_cifrado", None)
     return datos
+
+
+def _validar_configuracion_email(valores: dict) -> None:
+    """Si las alertas por email o el resumen diario están habilitados, la
+    configuración SMTP tiene que estar completa. Se valida sobre el estado
+    FINAL (ya mergeado con lo que había en la base, ver actualizar_configuracion),
+    no solo sobre los campos que vinieron en este request puntual - así no
+    se puede terminar con el email "habilitado" pero a medio configurar
+    después de varios PUT sucesivos que solo tocan un campo por vez."""
+    if not (valores["email_habilitado"] or valores["resumen_diario_habilitado"]):
+        return
+
+    faltantes = [
+        campo for campo in ("smtp_host", "smtp_usuario", "smtp_password_cifrada", "email_destino")
+        if not valores.get(campo)
+    ]
+    if faltantes:
+        raise HTTPException(
+            400,
+            "Para habilitar el email hacen falta: " + ", ".join(faltantes).replace(
+                "smtp_password_cifrada", "smtp_password"
+            ),
+        )
+
+    if not _EMAIL_RE.match(valores["email_destino"]):
+        raise HTTPException(400, "email_destino no tiene un formato de email válido")
 
 
 @app.get("/configuracion", response_model=ConfiguracionOut)
@@ -114,9 +141,6 @@ def actualizar_configuracion(config: ConfiguracionIn):
             "smtp_port": actual["smtp_port"],
             "smtp_usuario": actual["smtp_usuario"],
             "smtp_password_cifrada": actual["smtp_password_cifrada"],
-            "telegram_habilitado": actual["telegram_habilitado"],
-            "telegram_chat_id": actual["telegram_chat_id"],
-            "telegram_token_cifrado": actual["telegram_token_cifrado"],
             "resumen_diario_habilitado": actual["resumen_diario_habilitado"],
             "resumen_diario_hora": actual["resumen_diario_hora"],
         }
@@ -124,7 +148,6 @@ def actualizar_configuracion(config: ConfiguracionIn):
         campos_sin_secretos = (
             "nombre_local", "umbral_stock_global", "email_habilitado",
             "email_destino", "smtp_host", "smtp_port", "smtp_usuario",
-            "telegram_habilitado", "telegram_chat_id",
             "resumen_diario_habilitado", "resumen_diario_hora",
         )
         for campo in campos_sin_secretos:
@@ -141,24 +164,17 @@ def actualizar_configuracion(config: ConfiguracionIn):
                 )
             except SecretConfigurationError as exc:
                 raise HTTPException(503, str(exc)) from exc
-        if "telegram_token" in campos_recibidos:
-            try:
-                valores["telegram_token_cifrado"] = (
-                    encrypt_secret(config.telegram_token)
-                    if config.telegram_token
-                    else None
-                )
-            except SecretConfigurationError as exc:
-                raise HTTPException(503, str(exc)) from exc
+
+        # valores ya tiene el estado FINAL (lo que había + lo nuevo que
+        # vino en este request) -> se valida acá, antes de escribir nada.
+        _validar_configuracion_email(valores)
 
         conn.execute(
             """UPDATE configuracion SET
                nombre_local = ?, umbral_stock_global = ?,
                email_habilitado = ?, email_destino = ?, smtp_host = ?,
                smtp_port = ?, smtp_usuario = ?, smtp_password_cifrada = ?,
-               telegram_habilitado = ?, telegram_chat_id = ?,
-               telegram_token_cifrado = ?, resumen_diario_habilitado = ?,
-               resumen_diario_hora = ?
+               resumen_diario_habilitado = ?, resumen_diario_hora = ?
                WHERE id = 1""",
             tuple(valores.values()),
         )
@@ -216,8 +232,8 @@ def crear_producto(producto: ProductoIn):
     conn = get_connection()
     with write_lock:
         cur = conn.execute(
-            "INSERT INTO producto (nombre, precio, stock, disponible) VALUES (?, ?, ?, ?)",
-            (producto.nombre, producto.precio, producto.stock, int(producto.disponible)),
+            "INSERT INTO producto (nombre, precio, stock, disponible, umbral_stock) VALUES (?, ?, ?, ?, ?)",
+            (producto.nombre, producto.precio, producto.stock, int(producto.disponible), producto.umbral_stock),
         )
         conn.commit()
         nuevo_id = cur.lastrowid
@@ -229,7 +245,12 @@ def crear_producto(producto: ProductoIn):
 def editar_producto(producto_id: int, cambios: ProductoPatch):
     """Alta/edición desde el panel de Admin: nombre, precio, stock y si el
     producto está disponible para vender (independiente del stock - sirve
-    para pausar un producto sin perder el conteo, ej. 'hoy no hay pescado')."""
+    para pausar un producto sin perder el conteo, ej. 'hoy no hay pescado').
+
+    umbral_stock se resuelve distinto al resto: null es un valor válido
+    con significado propio ("usar el umbral global"), así que hace falta
+    mirar qué campos vinieron realmente en el body (model_fields_set) en
+    vez de solo chequear "is not None" como con nombre/precio/stock."""
     conn = get_connection()
     with write_lock:
         row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()
@@ -239,9 +260,13 @@ def editar_producto(producto_id: int, cambios: ProductoPatch):
         precio = cambios.precio if cambios.precio is not None else row["precio"]
         stock = cambios.stock if cambios.stock is not None else row["stock"]
         disponible = cambios.disponible if cambios.disponible is not None else bool(row["disponible"])
+        if "umbral_stock" in cambios.model_fields_set:
+            umbral_stock = cambios.umbral_stock
+        else:
+            umbral_stock = row["umbral_stock"]
         conn.execute(
-            "UPDATE producto SET nombre = ?, precio = ?, stock = ?, disponible = ? WHERE id = ?",
-            (nombre, precio, stock, int(disponible), producto_id),
+            "UPDATE producto SET nombre = ?, precio = ?, stock = ?, disponible = ?, umbral_stock = ? WHERE id = ?",
+            (nombre, precio, stock, int(disponible), umbral_stock, producto_id),
         )
         conn.commit()
     row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()

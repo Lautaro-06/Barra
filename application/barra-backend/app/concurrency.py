@@ -21,8 +21,25 @@ tiempo", el acceso a barra.db sigue siendo seguro.
 Punto 2 - Hilo de vigilancia de stock
 -----------------------------------------------------------------
 Un threading.Thread daemon aparte, independiente del pool de arriba, que
-cada INTERVALO_VIGILANCIA_SEGUNDOS recorre la tabla producto y loguea un
-warning por cada producto cuyo stock esté por debajo de STOCK_MINIMO.
+cada INTERVALO_VIGILANCIA_SEGUNDOS recorre la tabla producto.
+
+Umbral efectivo: cada producto puede tener su propio producto.umbral_stock
+(nullable). Si lo tiene, se usa ese; si no, se usa configuracion.umbral_stock_global.
+STOCK_MINIMO (variable de entorno) queda solo como último respaldo, por si
+la fila de configuracion no existiera todavía por algún motivo.
+
+Detección de cruce real: se guarda en memoria (_ultimo_estado_bajo) si cada
+producto estaba por debajo del umbral en el chequeo anterior. Solo se
+LOGUEA (warning) el momento exacto en que un producto pasa de "ok" a
+"bajo" - no en cada chequeo mientras se mantiene bajo. Esto es clave para
+el paso siguiente del proyecto (envío de emails): el mismo mecanismo es
+el que va a decidir cuándo mandar la alerta una sola vez, en vez de spamear
+un email cada INTERVALO_VIGILANCIA_SEGUNDOS mientras no se repone el stock.
+
+El snapshot de GET /alertas, en cambio, siempre refleja el estado actual
+completo (todo lo que esté bajo en este momento), no solo los cruces - así
+la GUI puede mostrar en cualquier momento "qué está bajo ahora", sin tener
+que engancharse justo en el instante del cruce.
 
 Usa la MISMA conexión SQLite compartida que el resto del backend
 (get_connection() en database.py) -> por eso, aunque el hilo solo lee,
@@ -103,8 +120,8 @@ def shutdown_executor(wait: bool = True) -> None:
 
 # ---------- Punto 2: hilo de vigilancia de stock ----------
 
-# Umbral y frecuencia configurables por variable de entorno, sin tocar
-# código ni el esquema de la tabla producto (umbral global, no por ítem).
+# STOCK_MINIMO ahora es solo un respaldo (ver arriba): el umbral real es
+# producto.umbral_stock si existe, sino configuracion.umbral_stock_global.
 STOCK_MINIMO = int(os.environ.get("BARRA_STOCK_MINIMO", "5"))
 INTERVALO_VIGILANCIA_SEGUNDOS = int(
     os.environ.get("BARRA_STOCK_CHECK_INTERVAL", "30")
@@ -118,6 +135,12 @@ _stock_watch_thread: threading.Thread | None = None
 _alertas_lock = threading.Lock()
 _alertas_activas: list[dict] = []
 
+# producto_id -> bool: si estaba por debajo del umbral efectivo en el
+# chequeo anterior. Se usa para loguear (y, en el próximo paso, para
+# decidir cuándo mandar el email) solo en el momento del cruce real,
+# no en cada chequeo mientras el producto sigue bajo.
+_ultimo_estado_bajo: dict[int, bool] = {}
+
 
 def get_alertas_stock() -> list[dict]:
     """Devuelve una copia del snapshot actual de alertas de stock bajo.
@@ -128,37 +151,61 @@ def get_alertas_stock() -> list[dict]:
 
 def _vigilar_stock() -> None:
     logger.info(
-        "Hilo de vigilancia de stock arrancado (umbral=%s, intervalo=%ss)",
-        STOCK_MINIMO,
+        "Hilo de vigilancia de stock arrancado (intervalo=%ss, umbral de respaldo=%s)",
         INTERVALO_VIGILANCIA_SEGUNDOS,
+        STOCK_MINIMO,
     )
     while not _stock_watch_stop_event.is_set():
         conn = get_connection()
         with write_lock:
             rows = conn.execute(
-                "SELECT id, nombre, stock FROM producto WHERE stock < ? ORDER BY stock",
-                (STOCK_MINIMO,),
+                """
+                SELECT p.id, p.nombre, p.stock, p.umbral_stock,
+                       c.umbral_stock_global AS umbral_global
+                FROM producto p
+                LEFT JOIN configuracion c ON c.id = 1
+                """
             ).fetchall()
 
-        nuevas_alertas = [
-            {
-                "producto_id": row["id"],
-                "nombre": row["nombre"],
-                "stock": row["stock"],
-                "umbral": STOCK_MINIMO,
-            }
-            for row in rows
-        ]
+        nuevas_alertas = []
+        for row in rows:
+            umbral_global = row["umbral_global"] if row["umbral_global"] is not None else STOCK_MINIMO
+            umbral_efectivo = row["umbral_stock"] if row["umbral_stock"] is not None else umbral_global
+            esta_bajo = row["stock"] < umbral_efectivo
+            estaba_bajo = _ultimo_estado_bajo.get(row["id"], False)
+
+            if esta_bajo:
+                nuevas_alertas.append(
+                    {
+                        "producto_id": row["id"],
+                        "nombre": row["nombre"],
+                        "stock": row["stock"],
+                        "umbral": umbral_efectivo,
+                    }
+                )
+                if not estaba_bajo:
+                    # Cruce real (recién ahora quedó por debajo): único
+                    # momento en que se loguea, no en cada chequeo
+                    # mientras sigue bajo.
+                    logger.warning(
+                        "Stock bajo: '%s' cruzó el umbral (%s unidades, umbral: %s)",
+                        row["nombre"],
+                        row["stock"],
+                        umbral_efectivo,
+                    )
+            elif estaba_bajo:
+                # Cruce inverso: se repuso. También se loguea una sola vez.
+                logger.info(
+                    "Stock recuperado: '%s' volvió a estar por encima del umbral (%s unidades, umbral: %s)",
+                    row["nombre"],
+                    row["stock"],
+                    umbral_efectivo,
+                )
+
+            _ultimo_estado_bajo[row["id"]] = esta_bajo
+
         with _alertas_lock:
             _alertas_activas[:] = nuevas_alertas
-
-        for alerta in nuevas_alertas:
-            logger.warning(
-                "Stock bajo: '%s' tiene %s unidades (umbral: %s)",
-                alerta["nombre"],
-                alerta["stock"],
-                alerta["umbral"],
-            )
 
         # Espera interrumpible: si stop_stock_watcher() llama a .set(),
         # esta espera corta ahí mismo en vez de completar el intervalo.
@@ -169,6 +216,7 @@ def start_stock_watcher() -> None:
     """Arranca el hilo de vigilancia. Se llama en el startup de la app."""
     global _stock_watch_thread
     _stock_watch_stop_event.clear()
+    _ultimo_estado_bajo.clear()
     _stock_watch_thread = threading.Thread(
         target=_vigilar_stock, name="stock-watcher", daemon=True
     )

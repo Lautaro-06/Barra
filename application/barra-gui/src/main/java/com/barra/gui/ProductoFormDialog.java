@@ -17,20 +17,23 @@ import java.awt.FlowLayout;
 import java.awt.Window;
 
 /**
- * Formulario para crear o editar un producto (nombre, precio, stock y si
- * está disponible para vender). Lo usa Admin > Productos tanto para el
- * alta como para la edición, para no repetir el mismo formulario dos veces.
+ * Formulario para crear o editar un producto (nombre, precio, stock, si
+ * está disponible para vender y su umbral propio de stock bajo). Lo usa
+ * Admin > Productos tanto para el alta como para la edición, para no
+ * repetir el mismo formulario dos veces.
  */
 public class ProductoFormDialog extends JDialog {
 
     /** Qué hacer con los datos del formulario al tocar "Guardar". */
     public interface Guardador {
-        void guardar(String nombre, double precio, int stock, boolean disponible) throws Exception;
+        /** umbralStock en null = el producto usa el umbral global de configuración. */
+        void guardar(String nombre, double precio, int stock, boolean disponible, Integer umbralStock) throws Exception;
     }
 
     private final JTextField nombreField = campoTexto();
     private final JTextField precioField = campoTexto();
     private final JTextField stockField = campoTexto();
+    private final JTextField umbralField = campoTexto();
     private final JCheckBox disponibleCheck = new JCheckBox("Disponible para vender");
 
     public ProductoFormDialog(Window parent, String titulo, Producto existente, Guardador guardador) {
@@ -42,6 +45,7 @@ public class ProductoFormDialog extends JDialog {
             precioField.setText(formatearNumero(existente.precio));
             stockField.setText(String.valueOf(existente.stock));
             disponibleCheck.setSelected(existente.disponible);
+            umbralField.setText(existente.umbralStock == null ? "" : String.valueOf(existente.umbralStock));
         } else {
             stockField.setText("0");
             disponibleCheck.setSelected(true);
@@ -51,7 +55,7 @@ public class ProductoFormDialog extends JDialog {
         contenido.setBackground(UiTheme.TARJETA);
         contenido.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
         contenido.setLayout(new BoxLayout(contenido, BoxLayout.Y_AXIS));
-        contenido.setPreferredSize(new Dimension(320, 340));
+        contenido.setPreferredSize(new Dimension(320, 430));
 
         JLabel tituloLbl = new JLabel(titulo);
         tituloLbl.setFont(UiTheme.TITULO);
@@ -73,6 +77,10 @@ public class ProductoFormDialog extends JDialog {
         contenido.add(etiquetaCampo("Stock"));
         contenido.add(stockField);
         contenido.add(Box.createVerticalStrut(14));
+        contenido.add(etiquetaCampo("Umbral de stock bajo (opcional)"));
+        contenido.add(umbralField);
+        contenido.add(ayudaCampo("Vacío = usa el umbral global de Configuración."));
+        contenido.add(Box.createVerticalStrut(14));
         contenido.add(disponibleCheck);
         contenido.add(Box.createVerticalStrut(22));
 
@@ -92,15 +100,21 @@ public class ProductoFormDialog extends JDialog {
                 double precio = Double.parseDouble(precioField.getText().trim().replace(",", "."));
                 String stockTxt = stockField.getText().trim();
                 int stock = stockTxt.isEmpty() ? 0 : Integer.parseInt(stockTxt);
+                String umbralTxt = umbralField.getText().trim();
+                Integer umbral = umbralTxt.isEmpty() ? null : Integer.valueOf(umbralTxt);
 
                 if (nombre.isEmpty() || precio <= 0) {
                     Toast.error(this, "El nombre no puede estar vacío y el precio debe ser mayor a 0.");
                     return;
                 }
-                guardador.guardar(nombre, precio, stock, disponibleCheck.isSelected());
+                if (stock < 0 || (umbral != null && umbral < 0)) {
+                    Toast.error(this, "El stock y el umbral no pueden ser negativos.");
+                    return;
+                }
+                guardador.guardar(nombre, precio, stock, disponibleCheck.isSelected(), umbral);
                 dispose();
             } catch (NumberFormatException nfe) {
-                Toast.error(this, "Precio o stock inválido.");
+                Toast.error(this, "Precio, stock o umbral inválido.");
             } catch (Exception ex) {
                 Toast.error(this, "No se pudo guardar: " + ex.getMessage());
             }
@@ -133,6 +147,15 @@ public class ProductoFormDialog extends JDialog {
         l.setForeground(UiTheme.MUTED);
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
         l.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+        return l;
+    }
+
+    private static JLabel ayudaCampo(String texto) {
+        JLabel l = new JLabel(texto);
+        l.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
+        l.setForeground(UiTheme.MUTED);
+        l.setAlignmentX(Component.LEFT_ALIGNMENT);
+        l.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
         return l;
     }
 

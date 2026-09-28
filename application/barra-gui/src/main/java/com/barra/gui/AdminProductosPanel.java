@@ -18,18 +18,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Admin > Productos: el menú del local. Alta, edición de precio/stock y el
+ * Admin > Productos: el menú del local. Alta, edición de precio/stock, el
  * toggle de disponibilidad (para pausar un producto sin perder el conteo
- * de stock, ej. "hoy no hay pescado").
+ * de stock, ej. "hoy no hay pescado") y el umbral de stock bajo de cada
+ * producto (propio, o el global de Configuración si no tiene).
  */
 public class AdminProductosPanel extends JPanel {
 
     private final ApiClient api;
     private final Runnable alCambiar;
     private List<Producto> productos = List.of();
+    /** configuracion.umbral_stock_global, para los productos sin umbral propio. */
+    private int umbralGlobal = 5;
 
     private final DefaultTableModel modelo =
-            new DefaultTableModel(new Object[]{"Producto", "Precio", "Stock", "Disponible"}, 0) {
+            new DefaultTableModel(new Object[]{"Producto", "Precio", "Stock", "Umbral", "Disponible"}, 0) {
                 @Override
                 public boolean isCellEditable(int row, int col) {
                     return false;
@@ -65,7 +68,8 @@ public class AdminProductosPanel extends JPanel {
         tabla.setIntercellSpacing(new Dimension(0, 0));
         tabla.getTableHeader().setFont(UiTheme.TEXTO_NEGRITA);
         tabla.getColumnModel().getColumn(2).setCellRenderer(rendererStock());
-        tabla.getColumnModel().getColumn(3).setCellRenderer(rendererDisponible());
+        tabla.getColumnModel().getColumn(3).setCellRenderer(rendererUmbral());
+        tabla.getColumnModel().getColumn(4).setCellRenderer(rendererDisponible());
         tabla.addMouseListener(new MouseInputAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -93,10 +97,34 @@ public class AdminProductosPanel extends JPanel {
                                                              boolean hasFocus, int row, int column) {
                 Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
                 int stock = value instanceof Number n ? n.intValue() : 0;
-                c.setForeground(stock == 0 ? UiTheme.PELIGRO : stock < 5 ? UiTheme.ACENTO_OSCURO : UiTheme.TEXTO);
+                // Mismo criterio que el hilo de vigilancia del backend:
+                // "bajo" = stock < umbral efectivo del producto.
+                int umbral = row < productos.size() ? umbralEfectivo(productos.get(row)) : umbralGlobal;
+                c.setForeground(stock == 0 ? UiTheme.PELIGRO : stock < umbral ? UiTheme.ACENTO_OSCURO : UiTheme.TEXTO);
                 return c;
             }
         };
+    }
+
+    private DefaultTableCellRenderer rendererUmbral() {
+        return new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                             boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                if (value == null) {
+                    setText("Global (" + umbralGlobal + ")");
+                    c.setForeground(UiTheme.MUTED);
+                } else {
+                    c.setForeground(UiTheme.TEXTO);
+                }
+                return c;
+            }
+        };
+    }
+
+    private int umbralEfectivo(Producto p) {
+        return p.umbralStock != null ? p.umbralStock : umbralGlobal;
     }
 
     private DefaultTableCellRenderer rendererDisponible() {
@@ -118,19 +146,27 @@ public class AdminProductosPanel extends JPanel {
         this.productos = new ArrayList<>(productos);
         modelo.setRowCount(0);
         for (Producto p : productos) {
-            modelo.addRow(new Object[]{p.nombre, UiTheme.moneda(p.precio), p.stock, p.disponible});
+            modelo.addRow(new Object[]{p.nombre, UiTheme.moneda(p.precio), p.stock, p.umbralStock, p.disponible});
+        }
+    }
+
+    /** Umbral global de Configuración (llamado por el polling). */
+    public void setUmbralGlobal(int umbralGlobal) {
+        if (this.umbralGlobal != umbralGlobal) {
+            this.umbralGlobal = umbralGlobal;
+            modelo.fireTableDataChanged();
         }
     }
 
     private void abrirFormulario(Producto existente) {
         Window ventana = SwingUtilities.getWindowAncestor(this);
         String titulo = existente == null ? "Nuevo producto" : "Editar producto";
-        ProductoFormDialog dialogo = new ProductoFormDialog(ventana, titulo, existente, (nombre, precio, stock, disponible) -> {
+        ProductoFormDialog dialogo = new ProductoFormDialog(ventana, titulo, existente, (nombre, precio, stock, disponible, umbralStock) -> {
             if (existente == null) {
-                api.crearProducto(nombre, precio, stock, disponible);
+                api.crearProducto(nombre, precio, stock, disponible, umbralStock);
                 Toast.exito(this, "Producto \"" + nombre + "\" creado");
             } else {
-                api.editarProducto(existente.id, nombre, precio, stock, disponible);
+                api.editarProducto(existente.id, nombre, precio, stock, disponible, umbralStock);
                 Toast.exito(this, "Producto \"" + nombre + "\" actualizado");
             }
             alCambiar.run();

@@ -97,6 +97,7 @@ public class AdminPanel extends JPanel {
 
     public void setConfiguracion(Configuracion configuracion) {
         configuracionPanel.setConfiguracion(configuracion);
+        productosPanel.setUmbralGlobal(configuracion.umbralStockGlobal);
     }
 
     public void setAdmin(Admin admin) {

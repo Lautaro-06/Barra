@@ -9,6 +9,7 @@ import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -46,6 +47,8 @@ public class AdminConfiguracionPanel extends JPanel {
     private final JCheckBox resumenHabilitadoCheck = new JCheckBox("Enviar resumen diario de ventas por email");
     private final JTextField resumenHoraField = campoTexto();
 
+    private final RoundButton probarEmailBtn = new RoundButton("Enviar email de prueba", UiTheme.INFO,
+            UiTheme.INFO.darker());
     private boolean configuracionCargada = false;
     private boolean adminCargado = false;
 
@@ -113,6 +116,10 @@ public class AdminConfiguracionPanel extends JPanel {
         form.add(smtpPasswordField);
         form.add(smtpPasswordAyuda);
         form.add(boton("Guardar configuración de email", this::guardarEmail));
+        form.add(ayuda("Guardá primero: la prueba usa la configuración guardada."));
+        probarEmailBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        probarEmailBtn.addActionListener(e -> probarEmail());
+        form.add(probarEmailBtn);
 
         JScrollPane scroll = new JScrollPane(form);
         scroll.setOpaque(false);
@@ -133,7 +140,8 @@ public class AdminConfiguracionPanel extends JPanel {
     }
 
     public void setAdmin(Admin admin) {
-        if (adminCargado) return;
+        if (adminCargado)
+            return;
         adminCargado = true;
         nombreDuenoField.setText(admin.nombreDueno);
         emailDuenoField.setText(admin.emailDueno);
@@ -244,6 +252,35 @@ public class AdminConfiguracionPanel extends JPanel {
             Toast.error(this, "No se pudo guardar: " + ex.getMessage());
         }
     }
+
+    /**
+     * Manda un email de prueba. Corre en un SwingWorker porque hablar con
+     * el servidor SMTP puede tardar varios segundos, y hacerlo en el hilo
+     * de Swing congelaría toda la ventana mientras tanto.
+     */
+    private void probarEmail() {
+        probarEmailBtn.setEnabled(false);
+        probarEmailBtn.setText("Enviando...");
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return api.probarEmail();
+            }
+
+            @Override
+            protected void done() {
+                probarEmailBtn.setEnabled(true);
+                probarEmailBtn.setText("Enviar email de prueba");
+                try {
+                    Toast.exito(AdminConfiguracionPanel.this, "Email de prueba enviado a " + get());
+                } catch (Exception ex) {
+                    Throwable causa = ex.getCause() != null ? ex.getCause() : ex;
+                    Toast.error(AdminConfiguracionPanel.this, "No se pudo enviar: " + causa.getMessage());
+                }
+            }
+        }.execute();
+    }
+
     // ---------- Helpers de armado del formulario ----------
 
     private static JLabel titulo(String texto, int margenArriba) {

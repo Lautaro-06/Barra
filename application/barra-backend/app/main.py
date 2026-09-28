@@ -27,6 +27,12 @@ from .concurrency import (
     stop_stock_watcher,
 )
 from .database import get_connection, init_db, write_lock
+from .mailer import (
+    EmailError,
+    enviar_email,
+    leer_config_email,
+    obtener_email_destino_efectivo,
+)
 from .secrets import SecretConfigurationError, encrypt_secret
 from .models import (
     ProductoIn,
@@ -195,6 +201,30 @@ def actualizar_configuracion(config: ConfiguracionIn):
     row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
     return _configuracion_a_dict(conn, row)
 
+@app.post("/configuracion/probar-email")
+def probar_email():
+    """Manda un email de prueba con la configuración SMTP guardada, para
+    que el dueño confirme desde el panel de Admin que todo funciona antes
+    de depender de las alertas. No hace falta tener el email habilitado.
+    Responde 400 con el motivo si no se pudo mandar."""
+    conn = get_connection()
+    with write_lock:
+        try:
+            config = leer_config_email(conn)
+        except EmailError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    # Afuera del lock: la conexión SMTP puede tardar varios segundos.
+    try:
+        enviar_email(
+            config,
+            f"[{config.nombre_local}] Email de prueba",
+            f"Si te llegó este email, la configuración de {config.nombre_local} "
+            "está lista para mandarte alertas de stock y el resumen diario.\n\n-- Barra",
+        )
+    except EmailError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"enviado_a": config.destino}
 
 @app.get("/admin", response_model=AdminOut)
 def obtener_admin():

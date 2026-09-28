@@ -84,6 +84,26 @@ public class ApiClient {
         checkOk(resp);
         return configuracionFromMap(Json.parseObject(resp.body()));
     }
+        /**
+     * Pide al backend que mande un email de prueba con la configuración
+     * SMTP ya guardada. Devuelve la dirección a la que se mandó. Si no se
+     * pudo, la IOException trae solo el motivo que explica el backend.
+     * Puede tardar varios segundos (habla con el servidor de mail): no
+     * llamarlo desde el hilo de Swing.
+     */
+    public String probarEmail() throws IOException, InterruptedException {
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/configuracion/probar-email"))
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        if (resp.statusCode() == 400) {
+            throw new IOException(String.valueOf(Json.parseObject(resp.body()).get("detail")));
+        }
+        checkOk(resp);
+        return (String) Json.parseObject(resp.body()).get("enviado_a");
+    }
+
 
     // ---------- Datos del dueño (Admin) ----------
 

@@ -60,7 +60,8 @@ def init_db() -> None:
             precio      REAL NOT NULL,
             stock       INTEGER NOT NULL DEFAULT 0,
             disponible  INTEGER NOT NULL DEFAULT 1,
-            umbral_stock INTEGER DEFAULT NULL
+            umbral_stock INTEGER DEFAULT NULL,
+            alerta_stock_enviada INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS admin (
@@ -121,6 +122,7 @@ def init_db() -> None:
     # así no hace falta borrar barra.db para actualizar.
     _agregar_columna_si_falta(conn, "producto", "disponible", "disponible INTEGER NOT NULL DEFAULT 1")
     _agregar_columna_si_falta(conn, "producto", "umbral_stock", "umbral_stock INTEGER DEFAULT NULL")
+    _agregar_columna_si_falta(conn, "producto", "alerta_stock_enviada", "alerta_stock_enviada INTEGER NOT NULL DEFAULT 0")
     _agregar_columna_si_falta(conn, "pedido", "cuenta_id", "cuenta_id INTEGER REFERENCES cuenta(id)")
     _agregar_columna_si_falta(conn, "configuracion", "umbral_stock_global", "umbral_stock_global INTEGER NOT NULL DEFAULT 5")
     _agregar_columna_si_falta(conn, "configuracion", "email_habilitado", "email_habilitado INTEGER NOT NULL DEFAULT 0")

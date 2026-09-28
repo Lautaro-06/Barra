@@ -31,10 +31,25 @@ la fila de configuracion no existiera todavía por algún motivo.
 Detección de cruce real: se guarda en memoria (_ultimo_estado_bajo) si cada
 producto estaba por debajo del umbral en el chequeo anterior. Solo se
 LOGUEA (warning) el momento exacto en que un producto pasa de "ok" a
-"bajo" - no en cada chequeo mientras se mantiene bajo. Esto es clave para
-el paso siguiente del proyecto (envío de emails): el mismo mecanismo es
-el que va a decidir cuándo mandar la alerta una sola vez, en vez de spamear
-un email cada INTERVALO_VIGILANCIA_SEGUNDOS mientras no se repone el stock.
+"bajo" - no en cada chequeo mientras se mantiene bajo. 
+
+Email de alerta: si configuracion.email_habilitado está activo, se manda
+UN email al dueño por cada producto que queda bajo el umbral, no uno cada
+INTERVALO_VIGILANCIA_SEGUNDOS mientras no se repone. Para eso se usa la
+columna producto.alerta_stock_enviada (en la base, no en memoria, así un
+reinicio del backend no vuelve a mandar las alertas ya enviadas):
+  - bajo y alerta_stock_enviada = 0  -> se incluye en el email; si el
+    envío sale bien se marca en 1.
+  - ya no está bajo y estaba en 1    -> se vuelve a 0 (se repuso), así la
+    próxima vez que baje se avisa de nuevo.
+Si en el mismo chequeo bajan varios productos, van todos en un solo email.
+Si el envío falla (SMTP caído, contraseña mal, etc.) se loguea el error y
+se reintenta recién después de REINTENTO_EMAIL_SEGUNDOS, para no martillar
+el servidor SMTP ni llenar el log cada 30 segundos. Si el email está
+deshabilitado no se marca nada: al habilitarlo, llega un email con todo lo
+que esté bajo en ese momento.
+La conexión SMTP (que puede tardar segundos) se hace AFUERA de write_lock,
+para no frenar los pedidos mientras se habla con el servidor de mail.
 
 El snapshot de GET /alertas, en cambio, siempre refleja el estado actual
 completo (todo lo que esté bajo en este momento), no solo los cruces - así
@@ -93,12 +108,13 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
 from .database import DB_PATH, get_connection, write_lock
-
+from .mailer import EmailError, armar_alerta_stock, enviar_email, leer_config_email
 logger = logging.getLogger("barra.concurrency")
 
 # ---------- Punto 1: pool de hilos para pedidos ----------
@@ -126,6 +142,8 @@ STOCK_MINIMO = int(os.environ.get("BARRA_STOCK_MINIMO", "5"))
 INTERVALO_VIGILANCIA_SEGUNDOS = int(
     os.environ.get("BARRA_STOCK_CHECK_INTERVAL", "30")
 )
+# Después de un envío fallido, cuánto esperar antes de volver a intentar.
+REINTENTO_EMAIL_SEGUNDOS = int(os.environ.get("BARRA_EMAIL_RETRY_SECONDS", "300"))
 
 _stock_watch_stop_event = threading.Event()
 _stock_watch_thread: threading.Thread | None = None
@@ -136,10 +154,14 @@ _alertas_lock = threading.Lock()
 _alertas_activas: list[dict] = []
 
 # producto_id -> bool: si estaba por debajo del umbral efectivo en el
-# chequeo anterior. Se usa para loguear (y, en el próximo paso, para
-# decidir cuándo mandar el email) solo en el momento del cruce real,
-# no en cada chequeo mientras el producto sigue bajo.
+# chequeo anterior. Se usa solo para loguear en el momento del cruce real,
+# no en cada chequeo mientras el producto sigue bajo. (Los emails usan
+# producto.alerta_stock_enviada, que sobrevive a un reinicio.)
 _ultimo_estado_bajo: dict[int, bool] = {}
+
+# time.monotonic() a partir del cual se puede volver a intentar mandar un
+# email de alerta después de un fallo. Solo lo toca el hilo stock-watcher.
+_proximo_intento_email = 0.0
 
 
 def get_alertas_stock() -> list[dict]:
@@ -149,40 +171,46 @@ def get_alertas_stock() -> list[dict]:
         return list(_alertas_activas)
 
 
-def _vigilar_stock() -> None:
-    logger.info(
-        "Hilo de vigilancia de stock arrancado (intervalo=%ss, umbral de respaldo=%s)",
-        INTERVALO_VIGILANCIA_SEGUNDOS,
-        STOCK_MINIMO,
-    )
-    while not _stock_watch_stop_event.is_set():
-        conn = get_connection()
-        with write_lock:
-            rows = conn.execute(
-                """
-                SELECT p.id, p.nombre, p.stock, p.umbral_stock,
-                       c.umbral_stock_global AS umbral_global
-                FROM producto p
-                LEFT JOIN configuracion c ON c.id = 1
-                """
-            ).fetchall()
+def _chequear_stock() -> None:
+    """Un chequeo completo: actualiza el snapshot de GET /alertas, loguea
+    los cruces de umbral y manda el email de alerta si corresponde."""
+    global _proximo_intento_email
+
+    conn = get_connection()
+    config_email = None
+    pendientes_email: list[dict] = []
+
+    with write_lock:
+        rows = conn.execute(
+            """
+            SELECT p.id, p.nombre, p.stock, p.umbral_stock, p.alerta_stock_enviada,
+                   c.umbral_stock_global AS umbral_global,
+                   c.email_habilitado AS email_habilitado
+            FROM producto p
+            LEFT JOIN configuracion c ON c.id = 1
+            """
+        ).fetchall()
 
         nuevas_alertas = []
+        repuestos_ids = []
+        email_habilitado = False
         for row in rows:
+            email_habilitado = bool(row["email_habilitado"])
             umbral_global = row["umbral_global"] if row["umbral_global"] is not None else STOCK_MINIMO
             umbral_efectivo = row["umbral_stock"] if row["umbral_stock"] is not None else umbral_global
             esta_bajo = row["stock"] < umbral_efectivo
             estaba_bajo = _ultimo_estado_bajo.get(row["id"], False)
 
             if esta_bajo:
-                nuevas_alertas.append(
-                    {
-                        "producto_id": row["id"],
-                        "nombre": row["nombre"],
-                        "stock": row["stock"],
-                        "umbral": umbral_efectivo,
-                    }
-                )
+                alerta = {
+                    "producto_id": row["id"],
+                    "nombre": row["nombre"],
+                    "stock": row["stock"],
+                    "umbral": umbral_efectivo,
+                }
+                nuevas_alertas.append(alerta)
+                if not row["alerta_stock_enviada"]:
+                    pendientes_email.append(alerta)
                 if not estaba_bajo:
                     # Cruce real (recién ahora quedó por debajo): único
                     # momento en que se loguea, no en cada chequeo
@@ -193,19 +221,76 @@ def _vigilar_stock() -> None:
                         row["stock"],
                         umbral_efectivo,
                     )
-            elif estaba_bajo:
-                # Cruce inverso: se repuso. También se loguea una sola vez.
-                logger.info(
-                    "Stock recuperado: '%s' volvió a estar por encima del umbral (%s unidades, umbral: %s)",
-                    row["nombre"],
-                    row["stock"],
-                    umbral_efectivo,
-                )
+            else:
+                if row["alerta_stock_enviada"]:
+                    repuestos_ids.append(row["id"])
+                if estaba_bajo:
+                    # Cruce inverso: se repuso. También se loguea una sola vez.
+                    logger.info(
+                        "Stock recuperado: '%s' volvió a estar por encima del umbral (%s unidades, umbral: %s)",
+                        row["nombre"],
+                        row["stock"],
+                        umbral_efectivo,
+                    )
 
             _ultimo_estado_bajo[row["id"]] = esta_bajo
 
-        with _alertas_lock:
-            _alertas_activas[:] = nuevas_alertas
+        if repuestos_ids:
+            # Se repusieron: la próxima vez que bajen se vuelve a avisar.
+            conn.executemany(
+                "UPDATE producto SET alerta_stock_enviada = 0 WHERE id = ?",
+                [(pid,) for pid in repuestos_ids],
+            )
+            conn.commit()
+
+        if pendientes_email and email_habilitado and time.monotonic() >= _proximo_intento_email:
+            try:
+                config_email = leer_config_email(conn)
+            except EmailError as exc:
+                logger.error("No se puede mandar la alerta de stock por email: %s", exc)
+                _proximo_intento_email = time.monotonic() + REINTENTO_EMAIL_SEGUNDOS
+
+    with _alertas_lock:
+        _alertas_activas[:] = nuevas_alertas
+
+    if config_email is None:
+        return
+
+    # Afuera de write_lock: hablar con el servidor SMTP puede tardar.
+    asunto, cuerpo = armar_alerta_stock(config_email.nombre_local, pendientes_email)
+    try:
+        enviar_email(config_email, asunto, cuerpo)
+    except EmailError as exc:
+        logger.error(
+            "Falló el email de alerta de stock (se reintenta en %ss): %s",
+            REINTENTO_EMAIL_SEGUNDOS,
+            exc,
+        )
+        _proximo_intento_email = time.monotonic() + REINTENTO_EMAIL_SEGUNDOS
+        return
+
+    _proximo_intento_email = 0.0
+    with write_lock:
+        conn.executemany(
+            "UPDATE producto SET alerta_stock_enviada = 1 WHERE id = ?",
+            [(p["producto_id"],) for p in pendientes_email],
+        )
+        conn.commit()
+
+
+def _vigilar_stock() -> None:
+    logger.info(
+        "Hilo de vigilancia de stock arrancado (intervalo=%ss, umbral de respaldo=%s)",
+        INTERVALO_VIGILANCIA_SEGUNDOS,
+        STOCK_MINIMO,
+    )
+    while not _stock_watch_stop_event.is_set():
+        try:
+            _chequear_stock()
+        except Exception:
+            # Un error inesperado no tiene que matar el hilo: se loguea y
+            # se sigue vigilando en el próximo intervalo.
+            logger.exception("Error inesperado en el chequeo de stock")
 
         # Espera interrumpible: si stop_stock_watcher() llama a .set(),
         # esta espera corta ahí mismo en vez de completar el intervalo.
@@ -214,9 +299,10 @@ def _vigilar_stock() -> None:
 
 def start_stock_watcher() -> None:
     """Arranca el hilo de vigilancia. Se llama en el startup de la app."""
-    global _stock_watch_thread
+    global _stock_watch_thread, _proximo_intento_email
     _stock_watch_stop_event.clear()
     _ultimo_estado_bajo.clear()
+    _proximo_intento_email = 0.0
     _stock_watch_thread = threading.Thread(
         target=_vigilar_stock, name="stock-watcher", daemon=True
     )

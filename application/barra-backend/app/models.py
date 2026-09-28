@@ -5,8 +5,13 @@ Modelos Pydantic: definen el "contrato" JSON entre Java y Python.
 Java arma estos mismos campos como objetos/records al serializar/deserializar.
 """
 
-from pydantic import BaseModel, Field
+import re
 
+from pydantic import BaseModel, Field, field_validator
+
+# Compartidos con main.py para validar emails y la hora del resumen diario.
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+HORA_RE = r"^([01]\d|2[0-3]):[0-5]\d$"  # HH:MM, 00:00 a 23:59
 
 class ProductoOut(BaseModel):
     id: int
@@ -50,7 +55,7 @@ class AdminOut(BaseModel):
 
 class AdminIn(BaseModel):
     nombre_dueno: str = Field(min_length=1)
-    email_dueno: str = Field(min_length=1)
+    email_dueno: str = Field(pattern=EMAIL_RE.pattern)
     telefono: str | None = None
 
 
@@ -113,6 +118,9 @@ class ConfiguracionOut(BaseModel):
     umbral_stock_global: int
     email_habilitado: bool
     email_destino: str | None
+    # email_destino si está cargado, sino el email del dueño (/admin). Es
+    # a donde se van a mandar realmente las alertas y el resumen diario.
+    email_destino_efectivo: str | None
     smtp_host: str | None
     smtp_port: int
     smtp_usuario: str | None
@@ -122,16 +130,50 @@ class ConfiguracionOut(BaseModel):
 
 
 class ConfiguracionIn(BaseModel):
-    nombre_local: str = Field(min_length=1)
-    umbral_stock_global: int = Field(ge=0, default=5)
-    email_habilitado: bool = False
+    """Todos los campos son opcionales: POST/PUT /configuracion solo pisa
+    lo que venga en el body (ver model_fields_set en main.py), así se
+    puede mandar, por ejemplo, solo {"email_destino": "..."}.
+
+    Los campos que en la base son NOT NULL (nombre_local, los bool, el
+    umbral, el puerto y la hora) no aceptan null explícito: omitirlos es
+    "no lo cambio", mandarlos en null es un error (422)."""
+    nombre_local: str | None = Field(default=None, min_length=1)
+    umbral_stock_global: int | None = Field(default=None, ge=0)
+    email_habilitado: bool | None = None
     email_destino: str | None = None
     smtp_host: str | None = None
-    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
     smtp_usuario: str | None = None
     smtp_password: str | None = None
-    resumen_diario_habilitado: bool = False
-    resumen_diario_hora: str = "23:00"
+    resumen_diario_habilitado: bool | None = None
+    resumen_diario_hora: str | None = Field(default=None, pattern=HORA_RE)
+
+    @field_validator(
+        "nombre_local", "umbral_stock_global", "email_habilitado",
+        "smtp_port", "resumen_diario_habilitado", "resumen_diario_hora",
+    )
+    @classmethod
+    def _no_null(cls, valor):
+        if valor is None:
+            raise ValueError("no puede ser null (omitilo si no querés cambiarlo)")
+        return valor
+
+    @field_validator("email_destino", "smtp_host", "smtp_usuario", mode="before")
+    @classmethod
+    def _vacio_a_none(cls, valor):
+        # La GUI manda "" cuando el campo queda en blanco: se guarda como
+        # NULL, igual que si nunca se hubiera cargado.
+        if isinstance(valor, str):
+            valor = valor.strip()
+            return valor or None
+        return valor
+
+    @field_validator("email_destino")
+    @classmethod
+    def _email_valido(cls, valor):
+        if valor is not None and not EMAIL_RE.match(valor):
+            raise ValueError("no tiene un formato de email válido")
+        return valor
 
 
 class AlertaOut(BaseModel):

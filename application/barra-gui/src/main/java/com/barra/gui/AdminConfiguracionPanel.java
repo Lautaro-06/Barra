@@ -1,28 +1,53 @@
 package com.barra.gui;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Admin > Configuración: lo que hace que la misma app sirva para cualquier
- * local - hoy solo el nombre, pero es el lugar natural para sumar más
- * adelante moneda, dirección, logo, etc. sin tener que tocar código.
+ * local - nombre, datos del dueño y la configuración de email (alertas de
+ * stock y resumen diario).
+ *
+ * Los datos se cargan en el formulario una sola vez (y de nuevo después de
+ * cada guardado): MainWindow refresca cada 4s, y si se pisaran los campos
+ * en cada refresco se borraría lo que el usuario está escribiendo.
  */
 public class AdminConfiguracionPanel extends JPanel {
 
     private final ApiClient api;
     private final Runnable alCambiar;
-    private final JTextField nombreLocalField = new JTextField();
-    private final JTextField nombreDuenoField = new JTextField();
-    private final JTextField emailDuenoField = new JTextField();
-    private final JTextField telefonoField = new JTextField();
+    private final JTextField nombreLocalField = campoTexto();
+
+    private final JTextField nombreDuenoField = campoTexto();
+    private final JTextField emailDuenoField = campoTexto();
+    private final JTextField telefonoField = campoTexto();
+
+    private final JTextField umbralGlobalField = campoTexto();
+    private final JCheckBox emailHabilitadoCheck = new JCheckBox("Enviar alertas de stock bajo por email");
+    private final JTextField emailDestinoField = campoTexto();
+    private final JLabel emailDestinoAyuda = ayuda("");
+    private final JTextField smtpHostField = campoTexto();
+    private final JTextField smtpPortField = campoTexto();
+    private final JTextField smtpUsuarioField = campoTexto();
+    private final JPasswordField smtpPasswordField = new JPasswordField();
+    private final JLabel smtpPasswordAyuda = ayuda("");
+    private final JCheckBox resumenHabilitadoCheck = new JCheckBox("Enviar resumen diario de ventas por email");
+    private final JTextField resumenHoraField = campoTexto();
+
+    private boolean configuracionCargada = false;
+    private boolean adminCargado = false;
 
     public AdminConfiguracionPanel(ApiClient api, Runnable alCambiar) {
         super();
@@ -34,127 +59,108 @@ public class AdminConfiguracionPanel extends JPanel {
         JPanel form = new JPanel();
         form.setOpaque(false);
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
-        form.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+        form.setBorder(BorderFactory.createEmptyBorder(4, 0, 16, 0));
 
-        JLabel titulo = new JLabel("Configuración del local");
-        titulo.setFont(UiTheme.SUBTITULO);
-        titulo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // ---- Local ----
 
-        JLabel etiqueta = new JLabel("Nombre del local");
-        etiqueta.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
-        etiqueta.setForeground(UiTheme.MUTED);
-        etiqueta.setAlignmentX(Component.LEFT_ALIGNMENT);
-        etiqueta.setBorder(BorderFactory.createEmptyBorder(16, 0, 4, 0));
-
-        nombreLocalField.setFont(UiTheme.TEXTO_BASE);
-        nombreLocalField.setAlignmentX(Component.LEFT_ALIGNMENT);
-        nombreLocalField.setMaximumSize(new Dimension(320, 34));
-        nombreLocalField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UiTheme.BORDE),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-
-        JLabel ayuda = new JLabel("Aparece en el sidebar, en el título de la ventana y en el ticket.");
-        ayuda.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
-        ayuda.setForeground(UiTheme.MUTED);
-        ayuda.setAlignmentX(Component.LEFT_ALIGNMENT);
-        ayuda.setBorder(BorderFactory.createEmptyBorder(6, 0, 16, 0));
-
-        RoundButton guardarBtn = new RoundButton("Guardar", UiTheme.ACENTO, UiTheme.ACENTO_OSCURO);
-        guardarBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        guardarBtn.addActionListener(e -> guardar());
-
-        form.add(titulo);
-        form.add(etiqueta);
+        form.add(titulo("Configuración del local", 0));
+        form.add(etiqueta("Nombre del local", 16));
         form.add(nombreLocalField);
-        form.add(ayuda);
-        form.add(guardarBtn);
+        form.add(ayuda("Aparece en el sidebar, en el título de la ventana y en el ticket."));
+        form.add(boton("Guardar", this::guardar));
 
         // ---- Datos del dueño (para alertas y resumen diario por email) ----
 
-        JLabel tituloDueno = new JLabel("Datos del dueño");
-        tituloDueno.setFont(UiTheme.SUBTITULO);
-        tituloDueno.setAlignmentX(Component.LEFT_ALIGNMENT);
-        tituloDueno.setBorder(BorderFactory.createEmptyBorder(24, 0, 0, 0));
-
-        JLabel etiquetaNombreDueno = new JLabel("Nombre del dueño");
-        etiquetaNombreDueno.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
-        etiquetaNombreDueno.setForeground(UiTheme.MUTED);
-        etiquetaNombreDueno.setAlignmentX(Component.LEFT_ALIGNMENT);
-        etiquetaNombreDueno.setBorder(BorderFactory.createEmptyBorder(16, 0, 4, 0));
-
-        nombreDuenoField.setFont(UiTheme.TEXTO_BASE);
-        nombreDuenoField.setAlignmentX(Component.LEFT_ALIGNMENT);
-        nombreDuenoField.setMaximumSize(new Dimension(320, 34));
-        nombreDuenoField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UiTheme.BORDE),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-
-        JLabel etiquetaEmailDueno = new JLabel("Email del dueño");
-        etiquetaEmailDueno.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
-        etiquetaEmailDueno.setForeground(UiTheme.MUTED);
-        etiquetaEmailDueno.setAlignmentX(Component.LEFT_ALIGNMENT);
-        etiquetaEmailDueno.setBorder(BorderFactory.createEmptyBorder(12, 0, 4, 0));
-
-        emailDuenoField.setFont(UiTheme.TEXTO_BASE);
-        emailDuenoField.setAlignmentX(Component.LEFT_ALIGNMENT);
-        emailDuenoField.setMaximumSize(new Dimension(320, 34));
-        emailDuenoField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UiTheme.BORDE),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-
-        JLabel etiquetaTelefono = new JLabel("Teléfono (opcional)");
-        etiquetaTelefono.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
-        etiquetaTelefono.setForeground(UiTheme.MUTED);
-        etiquetaTelefono.setAlignmentX(Component.LEFT_ALIGNMENT);
-        etiquetaTelefono.setBorder(BorderFactory.createEmptyBorder(12, 0, 4, 0));
-
-        telefonoField.setFont(UiTheme.TEXTO_BASE);
-        telefonoField.setAlignmentX(Component.LEFT_ALIGNMENT);
-        telefonoField.setMaximumSize(new Dimension(320, 34));
-        telefonoField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(UiTheme.BORDE),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-
-        JLabel ayudaDueno = new JLabel("Se usa como contacto para las alertas y el resumen diario por email.");
-        ayudaDueno.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
-        ayudaDueno.setForeground(UiTheme.MUTED);
-        ayudaDueno.setAlignmentX(Component.LEFT_ALIGNMENT);
-        ayudaDueno.setBorder(BorderFactory.createEmptyBorder(6, 0, 16, 0));
-
-        RoundButton guardarDuenoBtn = new RoundButton("Guardar datos del dueño", UiTheme.ACENTO, UiTheme.ACENTO_OSCURO);
-        guardarDuenoBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        guardarDuenoBtn.addActionListener(e -> guardarDueno());
-
-        form.add(tituloDueno);
-        form.add(etiquetaNombreDueno);
+        form.add(titulo("Datos del dueño", 24));
+        form.add(etiqueta("Nombre del dueño", 16));
         form.add(nombreDuenoField);
-        form.add(etiquetaEmailDueno);
+        form.add(etiqueta("Email del dueño", 12));
         form.add(emailDuenoField);
-        form.add(etiquetaTelefono);
+        form.add(etiqueta("Teléfono (opcional)", 12));
         form.add(telefonoField);
-        form.add(ayudaDueno);
-        form.add(guardarDuenoBtn);
+        form.add(ayuda("Si no cargás un email de destino abajo, las alertas y el resumen diario llegan a este email."));
+        form.add(boton("Guardar datos del dueño", this::guardarDueno));
 
-        add(form, BorderLayout.NORTH);
+        // ---- Stock y emails ----
+
+        form.add(titulo("Alertas y resumen por email", 24));
+        form.add(etiqueta("Umbral de stock bajo (global)", 16));
+        umbralGlobalField.setMaximumSize(new Dimension(120, 34));
+        form.add(umbralGlobalField);
+        form.add(ayuda("Se usa para los productos que no tienen un umbral propio."));
+
+        form.add(checkBox(emailHabilitadoCheck));
+        form.add(checkBox(resumenHabilitadoCheck));
+        form.add(etiqueta("Hora del resumen diario (HH:MM)", 8));
+        resumenHoraField.setMaximumSize(new Dimension(120, 34));
+        form.add(resumenHoraField);
+
+        form.add(etiqueta("Email de destino (opcional)", 16));
+        form.add(emailDestinoField);
+        form.add(emailDestinoAyuda);
+
+        form.add(etiqueta("Servidor SMTP", 4));
+        form.add(smtpHostField);
+        form.add(ayuda("Ej: smtp.gmail.com"));
+        form.add(etiqueta("Puerto SMTP", 4));
+        smtpPortField.setMaximumSize(new Dimension(120, 34));
+        form.add(smtpPortField);
+        form.add(ayuda("587 (STARTTLS) o 465 (SSL)."));
+        form.add(etiqueta("Usuario SMTP", 4));
+        form.add(smtpUsuarioField);
+        form.add(etiqueta("Contraseña SMTP", 12));
+        estilizar(smtpPasswordField);
+        form.add(smtpPasswordField);
+        form.add(smtpPasswordAyuda);
+        form.add(boton("Guardar configuración de email", this::guardarEmail));
+
+        JScrollPane scroll = new JScrollPane(form);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        add(scroll, BorderLayout.CENTER);
     }
 
     public void setConfiguracion(Configuracion config) {
-        if (!nombreLocalField.getText().equals(config.nombreLocal)) {
+        if (!nombreLocalField.getText().equals(config.nombreLocal) && !nombreLocalField.isFocusOwner()) {
             nombreLocalField.setText(config.nombreLocal);
+        }
+        if (!configuracionCargada) {
+            cargarConfiguracionEmail(config);
+            configuracionCargada = true;
         }
     }
 
     public void setAdmin(Admin admin) {
-        if (!nombreDuenoField.getText().equals(admin.nombreDueno)) {
-            nombreDuenoField.setText(admin.nombreDueno);
-        }
-        if (!emailDuenoField.getText().equals(admin.emailDueno)) {
-            emailDuenoField.setText(admin.emailDueno);
-        }
-        String telefonoActual = admin.telefono == null ? "" : admin.telefono;
-        if (!telefonoField.getText().equals(telefonoActual)) {
-            telefonoField.setText(telefonoActual);
-        }
+        if (adminCargado) return;
+        adminCargado = true;
+        nombreDuenoField.setText(admin.nombreDueno);
+        emailDuenoField.setText(admin.emailDueno);
+        telefonoField.setText(admin.telefono == null ? "" : admin.telefono);
+    }
+
+    /** MainWindow lo usa para pedir /admin una sola vez, no en cada refresco. */
+    public boolean necesitaAdmin() {
+        return !adminCargado;
+    }
+
+    private void cargarConfiguracionEmail(Configuracion config) {
+        umbralGlobalField.setText(String.valueOf(config.umbralStockGlobal));
+        emailHabilitadoCheck.setSelected(config.emailHabilitado);
+        resumenHabilitadoCheck.setSelected(config.resumenDiarioHabilitado);
+        resumenHoraField.setText(config.resumenDiarioHora);
+        emailDestinoField.setText(config.emailDestino == null ? "" : config.emailDestino);
+        emailDestinoAyuda.setText(config.emailDestinoEfectivo == null
+                ? "Sin destino: cargá uno acá o el email del dueño."
+                : "Los mails van a llegar a: " + config.emailDestinoEfectivo);
+        smtpHostField.setText(config.smtpHost == null ? "" : config.smtpHost);
+        smtpPortField.setText(String.valueOf(config.smtpPort));
+        smtpUsuarioField.setText(config.smtpUsuario == null ? "" : config.smtpUsuario);
+        smtpPasswordField.setText("");
+        smtpPasswordAyuda.setText(config.smtpPasswordConfigurada
+                ? "Ya hay una contraseña guardada. Dejalo vacío para no cambiarla."
+                : "Todavía no hay contraseña guardada.");
     }
 
     private void guardar() {
@@ -180,15 +186,119 @@ public class AdminConfiguracionPanel extends JPanel {
             Toast.error(this, "El nombre del dueño no puede estar vacío");
             return;
         }
-        if (email.isEmpty()) {
-            Toast.error(this, "El email del dueño no puede estar vacío");
+        if (!email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            Toast.error(this, "El email del dueño no es válido");
             return;
         }
         try {
             api.actualizarAdmin(nombre, email, telefono.isEmpty() ? null : telefono);
+            // El destino efectivo puede haber cambiado (si no hay email_destino propio).
+            cargarConfiguracionEmail(api.obtenerConfiguracion());
             Toast.exito(this, "Datos del dueño guardados");
         } catch (Exception ex) {
             Toast.error(this, "No se pudo guardar: " + ex.getMessage());
         }
+    }
+
+    private void guardarEmail() {
+        int umbral;
+        int puerto;
+        try {
+            umbral = Integer.parseInt(umbralGlobalField.getText().trim());
+            puerto = Integer.parseInt(smtpPortField.getText().trim());
+        } catch (NumberFormatException ex) {
+            Toast.error(this, "El umbral y el puerto tienen que ser números");
+            return;
+        }
+        if (umbral < 0) {
+            Toast.error(this, "El umbral no puede ser negativo");
+            return;
+        }
+        String hora = resumenHoraField.getText().trim();
+        if (!hora.matches("^([01]\\d|2[0-3]):[0-5]\\d$")) {
+            Toast.error(this, "La hora del resumen tiene que tener formato HH:MM (ej: 23:00)");
+            return;
+        }
+
+        Map<String, Object> cambios = new LinkedHashMap<>();
+        cambios.put("umbral_stock_global", umbral);
+        cambios.put("email_habilitado", emailHabilitadoCheck.isSelected());
+        cambios.put("resumen_diario_habilitado", resumenHabilitadoCheck.isSelected());
+        cambios.put("resumen_diario_hora", hora);
+        // Vacío = el backend lo guarda como null (se usa el email del dueño).
+        cambios.put("email_destino", emailDestinoField.getText().trim());
+        cambios.put("smtp_host", smtpHostField.getText().trim());
+        cambios.put("smtp_port", puerto);
+        cambios.put("smtp_usuario", smtpUsuarioField.getText().trim());
+        String password = new String(smtpPasswordField.getPassword());
+        if (!password.isEmpty()) {
+            // Solo se manda si se escribió una nueva: omitirla deja la guardada.
+            cambios.put("smtp_password", password);
+        }
+
+        try {
+            cargarConfiguracionEmail(api.actualizarConfiguracion(cambios));
+            alCambiar.run();
+            Toast.exito(this, "Configuración de email guardada");
+        } catch (Exception ex) {
+            Toast.error(this, "No se pudo guardar: " + ex.getMessage());
+        }
+    }
+    // ---------- Helpers de armado del formulario ----------
+
+    private static JLabel titulo(String texto, int margenArriba) {
+        JLabel label = new JLabel(texto);
+        label.setFont(UiTheme.SUBTITULO);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        label.setBorder(BorderFactory.createEmptyBorder(margenArriba, 0, 0, 0));
+        return label;
+    }
+
+    private static JLabel etiqueta(String texto, int margenArriba) {
+        JLabel label = new JLabel(texto);
+        label.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
+        label.setForeground(UiTheme.MUTED);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        label.setBorder(BorderFactory.createEmptyBorder(margenArriba, 0, 4, 0));
+        return label;
+    }
+
+    private static JLabel ayuda(String texto) {
+        JLabel label = new JLabel(texto);
+        label.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
+        label.setForeground(UiTheme.MUTED);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        label.setBorder(BorderFactory.createEmptyBorder(6, 0, 16, 0));
+        return label;
+    }
+
+    private static JTextField campoTexto() {
+        JTextField field = new JTextField();
+        estilizar(field);
+        return field;
+    }
+
+    private static void estilizar(JTextField field) {
+        field.setFont(UiTheme.TEXTO_BASE);
+        field.setAlignmentX(Component.LEFT_ALIGNMENT);
+        field.setMaximumSize(new Dimension(320, 34));
+        field.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(UiTheme.BORDE),
+                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+    }
+
+    private static JComponent checkBox(JCheckBox check) {
+        check.setOpaque(false);
+        check.setFont(UiTheme.TEXTO_BASE);
+        check.setAlignmentX(Component.LEFT_ALIGNMENT);
+        check.setBorder(BorderFactory.createEmptyBorder(4, 0, 4, 0));
+        return check;
+    }
+
+    private static RoundButton boton(String texto, Runnable accion) {
+        RoundButton btn = new RoundButton(texto, UiTheme.ACENTO, UiTheme.ACENTO_OSCURO);
+        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btn.addActionListener(e -> accion.run());
+        return btn;
     }
 }

@@ -80,32 +80,47 @@ def health():
 
 # ---------- Configuración (panel de Admin) ----------
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+def obtener_email_destino_efectivo(conn, email_destino: str | None) -> str | None:
+    """A dónde se mandan las alertas y el resumen diario: email_destino de
+    /configuracion si está cargado, sino el email del dueño de /admin.
+    Así alcanza con completar los datos del dueño una sola vez. El envío
+    de mails (próximas tareas) tiene que usar esta misma función."""
+    if email_destino:
+        return email_destino
+    fila = conn.execute("SELECT email_dueno FROM admin WHERE id = 1").fetchone()
+    return (fila["email_dueno"] or None) if fila else None
 
 
-def _configuracion_a_dict(row) -> dict:
+def _configuracion_a_dict(conn, row) -> dict:
     datos = dict(row)
     datos["email_habilitado"] = bool(datos["email_habilitado"])
     datos["resumen_diario_habilitado"] = bool(datos["resumen_diario_habilitado"])
     datos["smtp_password_configurada"] = bool(datos["smtp_password_cifrada"])
+    datos["email_destino_efectivo"] = obtener_email_destino_efectivo(conn, datos["email_destino"])
     datos.pop("smtp_password_cifrada", None)
     return datos
 
 
-def _validar_configuracion_email(valores: dict) -> None:
+def _validar_configuracion_email(conn, valores: dict) -> None:
     """Si las alertas por email o el resumen diario están habilitados, la
     configuración SMTP tiene que estar completa. Se valida sobre el estado
     FINAL (ya mergeado con lo que había en la base, ver actualizar_configuracion),
     no solo sobre los campos que vinieron en este request puntual - así no
     se puede terminar con el email "habilitado" pero a medio configurar
-    después de varios PUT sucesivos que solo tocan un campo por vez."""
+    después de varios PUT sucesivos que solo tocan un campo por vez.
+
+    El destino puede faltar en /configuracion si el dueño ya tiene su
+    email cargado en /admin (ver obtener_email_destino_efectivo). El
+    formato de email_destino ya lo valida ConfiguracionIn."""
     if not (valores["email_habilitado"] or valores["resumen_diario_habilitado"]):
         return
 
     faltantes = [
-        campo for campo in ("smtp_host", "smtp_usuario", "smtp_password_cifrada", "email_destino")
+        campo for campo in ("smtp_host", "smtp_usuario", "smtp_password_cifrada")
         if not valores.get(campo)
     ]
+    if not obtener_email_destino_efectivo(conn, valores["email_destino"]):
+        faltantes.append("email_destino (o el email del dueño en /admin)")
     if faltantes:
         raise HTTPException(
             400,
@@ -114,20 +129,18 @@ def _validar_configuracion_email(valores: dict) -> None:
             ),
         )
 
-    if not _EMAIL_RE.match(valores["email_destino"]):
-        raise HTTPException(400, "email_destino no tiene un formato de email válido")
-
 
 @app.get("/configuracion", response_model=ConfiguracionOut)
 def obtener_configuracion():
     conn = get_connection()
     row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
-    return _configuracion_a_dict(row)
+    return _configuracion_a_dict(conn, row)
 
 
 @app.post("/configuracion", response_model=ConfiguracionOut)
 @app.put("/configuracion", response_model=ConfiguracionOut)
 def actualizar_configuracion(config: ConfiguracionIn):
+    """Actualización parcial: solo se pisa lo que venga en el body."""
     conn = get_connection()
     with write_lock:
         actual = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
@@ -167,7 +180,7 @@ def actualizar_configuracion(config: ConfiguracionIn):
 
         # valores ya tiene el estado FINAL (lo que había + lo nuevo que
         # vino en este request) -> se valida acá, antes de escribir nada.
-        _validar_configuracion_email(valores)
+        _validar_configuracion_email(conn, valores)
 
         conn.execute(
             """UPDATE configuracion SET
@@ -180,7 +193,9 @@ def actualizar_configuracion(config: ConfiguracionIn):
         )
         conn.commit()
     row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
-    return _configuracion_a_dict(row)
+    return _configuracion_a_dict(conn, row)
+
+
 @app.get("/admin", response_model=AdminOut)
 def obtener_admin():
     """Datos del dueño del local (nombre, email de contacto, teléfono).

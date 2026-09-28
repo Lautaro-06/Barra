@@ -102,4 +102,8 @@ public class AdminPanel extends JPanel {
     public void setAdmin(Admin admin) {
         configuracionPanel.setAdmin(admin);
     }
+
+    public boolean necesitaAdmin() {
+        return configuracionPanel.necesitaAdmin();
+    }
 }

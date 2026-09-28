@@ -38,7 +38,8 @@ public class ApiClient {
                     .uri(URI.create(BASE_URL + "/health"))
                     .GET()
                     .build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+            HttpResponse<String> resp = http.send(req,
+                    HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
             return resp.statusCode() == 200;
         } catch (IOException | InterruptedException e) {
             return false;
@@ -52,25 +53,36 @@ public class ApiClient {
                 .uri(URI.create(BASE_URL + "/configuracion"))
                 .GET()
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
-        Map<String, Object> o = Json.parseObject(resp.body());
-        return new Configuracion((String) o.get("nombre_local"));
+        return configuracionFromMap(Json.parseObject(resp.body()));
     }
 
     public Configuracion actualizarConfiguracion(String nombreLocal) throws IOException, InterruptedException {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("nombre_local", nombreLocal);
+        Map<String, Object> cambios = new LinkedHashMap<>();
+        cambios.put("nombre_local", nombreLocal);
+        return actualizarConfiguracion(cambios);
+    }
 
+    /**
+     * Actualización parcial de /configuracion: el backend solo pisa las
+     * claves que vengan en el mapa (nombres de campo del lado Python, ej.
+     * "email_destino", "smtp_password"). Lo que no se manda queda como estaba.
+     */
+
+    public Configuracion actualizarConfiguracion(Map<String, Object> cambios) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/configuracion"))
                 .header("Content-Type", "application/json")
-                .method("PUT", HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .method("PUT",
+                        HttpRequest.BodyPublishers.ofString(Json.writeObject(cambios),
+                                java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
-        Map<String, Object> o = Json.parseObject(resp.body());
-        return new Configuracion((String) o.get("nombre_local"));
+        return configuracionFromMap(Json.parseObject(resp.body()));
     }
 
     // ---------- Datos del dueño (Admin) ----------
@@ -80,12 +92,14 @@ public class ApiClient {
                 .uri(URI.create(BASE_URL + "/admin"))
                 .GET()
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return adminFromMap(Json.parseObject(resp.body()));
     }
 
-    public Admin actualizarAdmin(String nombreDueno, String emailDueno, String telefono) throws IOException, InterruptedException {
+    public Admin actualizarAdmin(String nombreDueno, String emailDueno, String telefono)
+            throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nombre_dueno", nombreDueno);
         body.put("email_dueno", emailDueno);
@@ -94,9 +108,12 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/admin"))
                 .header("Content-Type", "application/json")
-                .method("PUT", HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .method("PUT",
+                        HttpRequest.BodyPublishers.ofString(Json.writeObject(body),
+                                java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return adminFromMap(Json.parseObject(resp.body()));
     }
@@ -108,7 +125,8 @@ public class ApiClient {
                 .uri(URI.create(BASE_URL + "/productos"))
                 .GET()
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
 
         List<Object> arr = Json.parseArray(resp.body());
@@ -126,7 +144,8 @@ public class ApiClient {
                 .uri(URI.create(BASE_URL + "/pedidos"))
                 .GET()
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
 
         List<Object> arr = Json.parseArray(resp.body());
@@ -137,13 +156,21 @@ public class ApiClient {
         return pedidos;
     }
 
-    /** Da de alta un producto nuevo (panel de Admin), sin umbral propio (usa el global). */
-    public Producto crearProducto(String nombre, double precio, int stock, boolean disponible) throws IOException, InterruptedException {
+    /**
+     * Da de alta un producto nuevo (panel de Admin), sin umbral propio (usa el
+     * global).
+     */
+    public Producto crearProducto(String nombre, double precio, int stock, boolean disponible)
+            throws IOException, InterruptedException {
         return crearProducto(nombre, precio, stock, disponible, null);
     }
 
-    /** Da de alta un producto nuevo (panel de Admin). umbralStock en null = usa el umbral global. */
-    public Producto crearProducto(String nombre, double precio, int stock, boolean disponible, Integer umbralStock) throws IOException, InterruptedException {
+    /**
+     * Da de alta un producto nuevo (panel de Admin). umbralStock en null = usa el
+     * umbral global.
+     */
+    public Producto crearProducto(String nombre, double precio, int stock, boolean disponible, Integer umbralStock)
+            throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nombre", nombre);
         body.put("precio", precio);
@@ -154,15 +181,21 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/productos"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(body),
+                        java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return productoFromMap(Json.parseObject(resp.body()));
     }
 
-    /** Edita nombre/precio/stock/disponibilidad, sin tocar el umbral propio del producto. */
-    public Producto editarProducto(int id, String nombre, double precio, int stock, boolean disponible) throws IOException, InterruptedException {
+    /**
+     * Edita nombre/precio/stock/disponibilidad, sin tocar el umbral propio del
+     * producto.
+     */
+    public Producto editarProducto(int id, String nombre, double precio, int stock, boolean disponible)
+            throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nombre", nombre);
         body.put("precio", precio);
@@ -175,9 +208,12 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/productos/" + id))
                 .header("Content-Type", "application/json")
-                .method("PATCH", HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .method("PATCH",
+                        HttpRequest.BodyPublishers.ofString(Json.writeObject(body),
+                                java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return productoFromMap(Json.parseObject(resp.body()));
     }
@@ -187,7 +223,8 @@ public class ApiClient {
      * producto. umbralStock en null limpia el override y vuelve a usar el
      * umbral global de configuracion.
      */
-    public Producto editarProducto(int id, String nombre, double precio, int stock, boolean disponible, Integer umbralStock) throws IOException, InterruptedException {
+    public Producto editarProducto(int id, String nombre, double precio, int stock, boolean disponible,
+            Integer umbralStock) throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nombre", nombre);
         body.put("precio", precio);
@@ -198,9 +235,12 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/productos/" + id))
                 .header("Content-Type", "application/json")
-                .method("PATCH", HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .method("PATCH",
+                        HttpRequest.BodyPublishers.ofString(Json.writeObject(body),
+                                java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return productoFromMap(Json.parseObject(resp.body()));
     }
@@ -212,7 +252,8 @@ public class ApiClient {
                 .uri(URI.create(BASE_URL + "/mesas"))
                 .GET()
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
 
         List<Object> arr = Json.parseArray(resp.body());
@@ -230,9 +271,11 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/mesas"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(body),
+                        java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return mesaFromMap(Json.parseObject(resp.body()));
     }
@@ -242,51 +285,66 @@ public class ApiClient {
                 .uri(URI.create(BASE_URL + "/mesas/" + id))
                 .DELETE()
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
     }
 
-    /** Abre la cuenta de una mesa libre (si ya tenía una abierta, la devuelve tal cual). */
+    /**
+     * Abre la cuenta de una mesa libre (si ya tenía una abierta, la devuelve tal
+     * cual).
+     */
     public Mesa abrirMesa(int id) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/mesas/" + id + "/abrir"))
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return mesaFromMap(Json.parseObject(resp.body()));
     }
 
-    /** Trae la cuenta abierta de la mesa con todas las rondas de pedido acumuladas. */
+    /**
+     * Trae la cuenta abierta de la mesa con todas las rondas de pedido acumuladas.
+     */
     public Cuenta obtenerCuentaMesa(int mesaId) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/mesas/" + mesaId + "/cuenta"))
                 .GET()
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return cuentaFromMap(Json.parseObject(resp.body()));
     }
 
-    /** Suma una ronda de pedido a la cuenta abierta de la mesa. */
-    public Pedido crearPedidoMesa(int mesaId, String nota, List<int[]> detalles) throws IOException, InterruptedException {
+    /* Suma una ronda de pedido a la cuenta abierta de la mesa. */
+    public Pedido crearPedidoMesa(int mesaId, String nota, List<int[]> detalles)
+            throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/mesas/" + mesaId + "/pedidos"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(pedidoBody(nota, detalles)), java.nio.charset.StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(pedidoBody(nota, detalles)),
+                        java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return pedidoFromMap(Json.parseObject(resp.body()));
     }
 
-    /** Cierra la cuenta de la mesa (que vuelve a quedar libre) y devuelve la cuenta completa para el ticket. */
+    /**
+     * Cierra la cuenta de la mesa (que vuelve a quedar libre) y devuelve la cuenta
+     * completa para el ticket.
+     */
     public Cuenta cerrarMesa(int mesaId) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/mesas/" + mesaId + "/cerrar"))
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return cuentaFromMap(Json.parseObject(resp.body()));
     }
@@ -301,9 +359,11 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/pedidos"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(pedidoBody(nota, detalles)), java.nio.charset.StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(Json.writeObject(pedidoBody(nota, detalles)),
+                        java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
         return pedidoFromMap(Json.parseObject(resp.body()));
     }
@@ -315,9 +375,12 @@ public class ApiClient {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL + "/pedidos/" + pedidoId + "/estado"))
                 .header("Content-Type", "application/json")
-                .method("PATCH", HttpRequest.BodyPublishers.ofString(Json.writeObject(body), java.nio.charset.StandardCharsets.UTF_8))
+                .method("PATCH",
+                        HttpRequest.BodyPublishers.ofString(Json.writeObject(body),
+                                java.nio.charset.StandardCharsets.UTF_8))
                 .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        HttpResponse<String> resp = http.send(req,
+                HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
         checkOk(resp);
     }
 
@@ -335,6 +398,23 @@ public class ApiClient {
         body.put("nota", nota);
         body.put("detalles", detallesJson);
         return body;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Configuracion configuracionFromMap(Object raw) {
+        Map<String, Object> o = (Map<String, Object>) raw;
+        return new Configuracion(
+                (String) o.get("nombre_local"),
+                ((Number) o.get("umbral_stock_global")).intValue(),
+                Boolean.TRUE.equals(o.get("email_habilitado")),
+                (String) o.get("email_destino"),
+                (String) o.get("email_destino_efectivo"),
+                (String) o.get("smtp_host"),
+                ((Number) o.get("smtp_port")).intValue(),
+                (String) o.get("smtp_usuario"),
+                Boolean.TRUE.equals(o.get("smtp_password_configurada")),
+                Boolean.TRUE.equals(o.get("resumen_diario_habilitado")),
+                (String) o.get("resumen_diario_hora"));
     }
 
     @SuppressWarnings("unchecked")

@@ -146,6 +146,11 @@ public class MainWindow extends JFrame {
             adminPanel.setProductos(productos);
             adminPanel.setMesas(mesas);
             adminPanel.setConfiguracion(config);
+            // /admin se pide una sola vez: los datos del dueño no cambian
+            // desde otra pantalla, y así no se pisa lo que se está tipeando.
+            if (adminPanel.necesitaAdmin()) {
+                adminPanel.setAdmin(api.obtenerAdmin());
+            }
 
             if (!marcaTexto.getText().equals(config.nombreLocal)) {
                 marcaTexto.setText(config.nombreLocal);

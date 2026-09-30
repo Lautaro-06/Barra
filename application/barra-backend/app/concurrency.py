@@ -110,11 +110,12 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .database import DB_PATH, get_connection, write_lock
 from .mailer import EmailError, armar_alerta_stock, enviar_email, leer_config_email
+from .resumen import armar_email_resumen, calcular_resumen
 logger = logging.getLogger("barra.concurrency")
 
 # ---------- Punto 1: pool de hilos para pedidos ----------
@@ -406,3 +407,114 @@ def stop_backup_thread() -> None:
     _backup_stop_event.set()
     if _backup_thread is not None:
         _backup_thread.join(timeout=5)
+
+# ---------- Punto 4: hilo del resumen diario de ventas ----------
+
+INTERVALO_RESUMEN_SEGUNDOS = int(os.environ.get("BARRA_RESUMEN_CHECK_INTERVAL", "30"))
+
+_resumen_stop_event = threading.Event()
+_resumen_thread: threading.Thread | None = None
+
+# Mismo criterio que _proximo_intento_email, pero para el resumen. Solo lo
+# toca el hilo resumen-diario.
+_proximo_intento_resumen = 0.0
+
+
+def _chequear_resumen(ahora: datetime | None = None) -> None:
+    """Si ya pasó la hora del resumen y hoy todavía no se mandó, lo arma y
+    lo manda. ahora se puede pasar a mano para probar sin esperar."""
+    global _proximo_intento_resumen
+
+    ahora = ahora or datetime.now()
+    conn = get_connection()
+
+    with write_lock:
+        config = conn.execute(
+            "SELECT resumen_diario_habilitado, resumen_diario_hora, resumen_diario_ultimo_envio "
+            "FROM configuracion WHERE id = 1"
+        ).fetchone()
+        if config is None or not config["resumen_diario_habilitado"]:
+            return
+
+        hora, minuto = (int(parte) for parte in config["resumen_diario_hora"].split(":"))
+        programado = ahora.replace(hour=hora, minute=minuto, second=0, microsecond=0)
+        ultimo = (
+            datetime.fromisoformat(config["resumen_diario_ultimo_envio"])
+            if config["resumen_diario_ultimo_envio"]
+            else None
+        )
+        if ahora < programado or (ultimo is not None and ultimo >= programado):
+            return  # todavía no es la hora, o el de hoy ya se mandó
+        if time.monotonic() < _proximo_intento_resumen:
+            return  # falló hace poco, esperar antes de reintentar
+
+        # Arranca donde terminó el resumen anterior: así no hay huecos ni
+        # ventas contadas dos veces aunque se cambie la hora. Si el último
+        # es muy viejo (backend apagado varios días), solo las últimas 24hs.
+        if ultimo is not None and ultimo >= programado - timedelta(days=2):
+            desde = ultimo
+        else:
+            desde = programado - timedelta(days=1)
+        resumen = calcular_resumen(conn, desde, programado)
+        try:
+            config_email = leer_config_email(conn)
+        except EmailError as exc:
+            logger.error("No se puede mandar el resumen diario: %s", exc)
+            _proximo_intento_resumen = time.monotonic() + REINTENTO_EMAIL_SEGUNDOS
+            return
+
+    # Afuera de write_lock: hablar con el servidor SMTP puede tardar.
+    asunto, cuerpo = armar_email_resumen(config_email.nombre_local, resumen)
+    try:
+        enviar_email(config_email, asunto, cuerpo)
+    except EmailError as exc:
+        logger.error(
+            "Falló el email del resumen diario (se reintenta en %ss): %s",
+            REINTENTO_EMAIL_SEGUNDOS,
+            exc,
+        )
+        _proximo_intento_resumen = time.monotonic() + REINTENTO_EMAIL_SEGUNDOS
+        return
+
+    _proximo_intento_resumen = 0.0
+    with write_lock:
+        conn.execute(
+            "UPDATE configuracion SET resumen_diario_ultimo_envio = ? WHERE id = 1",
+            (programado.isoformat(timespec="seconds"),),
+        )
+        conn.commit()
+    logger.info(
+        "Resumen diario enviado (%s pedidos, total %s)",
+        resumen["cantidad_pedidos"],
+        resumen["total_vendido"],
+    )
+
+
+def _vigilar_resumen() -> None:
+    logger.info("Hilo de resumen diario arrancado (intervalo=%ss)", INTERVALO_RESUMEN_SEGUNDOS)
+    while not _resumen_stop_event.is_set():
+        try:
+            _chequear_resumen()
+        except Exception:
+            # Mismo criterio que el hilo de stock: un error inesperado no
+            # tiene que matar el hilo.
+            logger.exception("Error inesperado en el chequeo del resumen diario")
+        _resumen_stop_event.wait(timeout=INTERVALO_RESUMEN_SEGUNDOS)
+
+
+def start_resumen_thread() -> None:
+    """Arranca el hilo del resumen diario. Se llama en el startup de la app."""
+    global _resumen_thread, _proximo_intento_resumen
+    _resumen_stop_event.clear()
+    _proximo_intento_resumen = 0.0
+    _resumen_thread = threading.Thread(
+        target=_vigilar_resumen, name="resumen-diario", daemon=True
+    )
+    _resumen_thread.start()
+
+
+def stop_resumen_thread() -> None:
+    """Corta el hilo del resumen diario prolijamente. Se llama en el shutdown."""
+    _resumen_stop_event.set()
+    if _resumen_thread is not None:
+        _resumen_thread.join(timeout=5)

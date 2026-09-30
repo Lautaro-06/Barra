@@ -10,11 +10,13 @@ import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
+import javax.swing.Box;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.Callable;
 
 /**
  * Admin > Configuración: lo que hace que la misma app sirva para cualquier
@@ -48,6 +50,8 @@ public class AdminConfiguracionPanel extends JPanel {
     private final JTextField resumenHoraField = campoTexto();
 
     private final RoundButton probarEmailBtn = new RoundButton("Enviar email de prueba", UiTheme.INFO,
+            UiTheme.INFO.darker());
+    private final RoundButton enviarResumenBtn = new RoundButton("Enviar resumen ahora", UiTheme.INFO,
             UiTheme.INFO.darker());
     private boolean configuracionCargada = false;
     private boolean adminCargado = false;
@@ -120,6 +124,11 @@ public class AdminConfiguracionPanel extends JPanel {
         probarEmailBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         probarEmailBtn.addActionListener(e -> probarEmail());
         form.add(probarEmailBtn);
+        form.add(Box.createVerticalStrut(8));
+        enviarResumenBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        enviarResumenBtn.addActionListener(e -> enviarResumen());
+        form.add(enviarResumenBtn);
+        form.add(ayuda("Manda ya el resumen de las últimas 24hs (el automático se sigue mandando a su hora)."));
 
         JScrollPane scroll = new JScrollPane(form);
         scroll.setOpaque(false);
@@ -253,26 +262,36 @@ public class AdminConfiguracionPanel extends JPanel {
         }
     }
 
+        private void probarEmail() {
+        enviarEnSegundoPlano(probarEmailBtn, api::probarEmail, "Email de prueba enviado a ");
+    }
+
+    private void enviarResumen() {
+        enviarEnSegundoPlano(enviarResumenBtn, api::enviarResumenDiario, "Resumen enviado a ");
+    }
+
     /**
-     * Manda un email de prueba. Corre en un SwingWorker porque hablar con
-     * el servidor SMTP puede tardar varios segundos, y hacerlo en el hilo
-     * de Swing congelaría toda la ventana mientras tanto.
+     * Corre un envío de email en un SwingWorker: hablar con el servidor
+     * SMTP puede tardar varios segundos, y hacerlo en el hilo de Swing
+     * congelaría toda la ventana mientras tanto. envio devuelve la
+     * dirección a la que se mandó.
      */
-    private void probarEmail() {
-        probarEmailBtn.setEnabled(false);
-        probarEmailBtn.setText("Enviando...");
+    private void enviarEnSegundoPlano(RoundButton boton, Callable<String> envio, String mensajeExito) {
+        String textoOriginal = boton.getText();
+        boton.setEnabled(false);
+        boton.setText("Enviando...");
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() throws Exception {
-                return api.probarEmail();
+                return envio.call();
             }
 
             @Override
             protected void done() {
-                probarEmailBtn.setEnabled(true);
-                probarEmailBtn.setText("Enviar email de prueba");
+                boton.setEnabled(true);
+                boton.setText(textoOriginal);
                 try {
-                    Toast.exito(AdminConfiguracionPanel.this, "Email de prueba enviado a " + get());
+                    Toast.exito(AdminConfiguracionPanel.this, mensajeExito + get());
                 } catch (Exception ex) {
                     Throwable causa = ex.getCause() != null ? ex.getCause() : ex;
                     Toast.error(AdminConfiguracionPanel.this, "No se pudo enviar: " + causa.getMessage());

@@ -112,7 +112,8 @@ def init_db() -> None:
             smtp_usuario               TEXT,
             smtp_password_cifrada      TEXT,
             resumen_diario_habilitado  INTEGER NOT NULL DEFAULT 0,
-            resumen_diario_hora        TEXT NOT NULL DEFAULT '23:00'
+            resumen_diario_hora        TEXT NOT NULL DEFAULT '23:00',
+            resumen_diario_ultimo_envio TEXT
         );
         """
     )
@@ -133,6 +134,7 @@ def init_db() -> None:
     _agregar_columna_si_falta(conn, "configuracion", "smtp_password_cifrada", "smtp_password_cifrada TEXT")
     _agregar_columna_si_falta(conn, "configuracion", "resumen_diario_habilitado", "resumen_diario_habilitado INTEGER NOT NULL DEFAULT 0")
     _agregar_columna_si_falta(conn, "configuracion", "resumen_diario_hora", "resumen_diario_hora TEXT NOT NULL DEFAULT '23:00'")
+    _agregar_columna_si_falta(conn, "configuracion", "resumen_diario_ultimo_envio", "resumen_diario_ultimo_envio TEXT")
     conn.commit()
 
     # Semilla de datos para poder probar la GUI Java desde el primer día

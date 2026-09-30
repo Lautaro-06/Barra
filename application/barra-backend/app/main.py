@@ -13,7 +13,7 @@ La GUI Java (ver ApiClient.java) apunta a http://127.0.0.1:8000
 
 import asyncio
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,8 +22,10 @@ from .concurrency import (
     pedido_executor,
     shutdown_executor,
     start_backup_thread,
+    start_resumen_thread,
     start_stock_watcher,
     stop_backup_thread,
+    stop_resumen_thread,
     stop_stock_watcher,
 )
 from .database import get_connection, init_db, write_lock
@@ -33,6 +35,7 @@ from .mailer import (
     leer_config_email,
     obtener_email_destino_efectivo,
 )
+from .resumen import armar_email_resumen, calcular_resumen
 from .secrets import SecretConfigurationError, encrypt_secret
 from .models import (
     ProductoIn,
@@ -69,10 +72,12 @@ def on_startup():
     init_db()
     start_stock_watcher()
     start_backup_thread()
+    start_resumen_thread()
 
 
 @app.on_event("shutdown")
 def on_shutdown():
+    stop_resumen_thread()
     stop_backup_thread()
     stop_stock_watcher()
     shutdown_executor()
@@ -222,6 +227,52 @@ def probar_email():
             f"Si te llegó este email, la configuración de {config.nombre_local} "
             "está lista para mandarte alertas de stock y el resumen diario.\n\n-- Barra",
         )
+    except EmailError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"enviado_a": config.destino}
+
+
+
+# ---------- Resumen diario de ventas ----------
+
+def _hasta_ahora() -> datetime:
+    """Límite superior para los resúmenes "hasta ahora". El período es
+    [desde, hasta) y pedido.fecha tiene precisión de segundos, así que se
+    suma 1 segundo para no dejar afuera un pedido hecho en este mismo
+    segundo."""
+    return datetime.now().replace(microsecond=0) + timedelta(seconds=1)
+
+
+@app.get("/resumen-diario")
+def ver_resumen_diario(horas: int = 24):
+    """Resumen de ventas de las últimas `horas` (24 por defecto) hasta
+    ahora, sin mandar nada. Sirve para ver qué va a llegar por email (y
+    para probar desde /docs)."""
+    if not 1 <= horas <= 24 * 31:
+        raise HTTPException(400, "horas tiene que estar entre 1 y 744")
+    hasta = _hasta_ahora()
+    conn = get_connection()
+    with write_lock:
+        return calcular_resumen(conn, hasta - timedelta(hours=horas), hasta)
+
+
+@app.post("/resumen-diario/enviar")
+def enviar_resumen_diario():
+    """Manda YA el resumen de las últimas 24hs, sin esperar a la hora
+    programada. No cuenta como el resumen del día: el automático se sigue
+    mandando a resumen_diario_hora como siempre."""
+    hasta = _hasta_ahora()
+    conn = get_connection()
+    with write_lock:
+        resumen = calcular_resumen(conn, hasta - timedelta(days=1), hasta)
+        try:
+            config = leer_config_email(conn)
+        except EmailError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    asunto, cuerpo = armar_email_resumen(config.nombre_local, resumen)
+    try:
+        enviar_email(config, asunto, cuerpo)
     except EmailError as exc:
         raise HTTPException(400, str(exc)) from exc
     return {"enviado_a": config.destino}

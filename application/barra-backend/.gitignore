@@ -2,6 +2,7 @@
 # No es código fuente: se recrean solos al arrancar el server.
 backups/
 barra.db
+.env
 
 # Entorno virtual de Python
 venv/

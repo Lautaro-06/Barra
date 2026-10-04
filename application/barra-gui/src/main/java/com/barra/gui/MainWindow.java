@@ -1,111 +1,163 @@
 package com.barra.gui;
 
-import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
-import java.awt.*;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.Timer;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * MainWindow
  *
- * GUI mínima (Swing, para no atarnos todavía a JavaFX) que demuestra el
- * punto 1 de la arquitectura: la ventana le habla al backend Python por
- * HTTP local y muestra lo que vuelve. Sirve de base para las pantallas
- * reales (Mostrador, Cocina, etc. - ver sección 19 del documento) que se
- * van a ir sumando.
+ * Ventana principal: una barra lateral para moverse entre las cuatro
+ * pantallas del local (Vender, Mesas, Cocina, Admin) y, atrás de todo, un
+ * polling periódico al backend Python que las mantiene sincronizadas entre sí.
  */
 public class MainWindow extends JFrame {
 
     private final ApiClient api = new ApiClient();
-    private final DefaultTableModel productosModel =
-            new DefaultTableModel(new Object[]{"ID", "Producto", "Precio", "Stock"}, 0);
-    private final DefaultTableModel pedidosModel =
-            new DefaultTableModel(new Object[]{"ID", "Fecha", "Estado", "Total", "Nota"}, 0);
+
+    private final CardLayout cardLayout = new CardLayout();
+    private final JPanel contenido = new JPanel(cardLayout);
+    private final Map<String, NavButton> botonesNav = new LinkedHashMap<>();
+
+    private final VentaPanel ventaPanel = new VentaPanel(api, this::refrescarDatos);
+    private final MesasPanel mesasPanel = new MesasPanel(api, this::refrescarDatos);
+    private final CocinaPanel cocinaPanel = new CocinaPanel(api, this::refrescarDatos);
+    private final AdminPanel adminPanel = new AdminPanel(api, this::refrescarDatos);
+
+    private final JLabel estadoDot = new JLabel("●");
+    private final JLabel estadoTexto = new JLabel("Conectando...");
+    private final JLabel marcaTexto = new JLabel("Barra");
 
     public MainWindow() {
-        super("Barra - Sistema de Pedidos (prototipo)");
+        super("Barra");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 500);
+        setSize(1080, 680);
+        setMinimumSize(new Dimension(860, 560));
         setLocationRelativeTo(null);
+        setIconImage(AppIcons.marcaComoImagen(64));
+        getContentPane().setBackground(UiTheme.FONDO);
+        setLayout(new BorderLayout());
 
-        JLabel estadoConexion = new JLabel("Verificando conexión con el backend...");
-        estadoConexion.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        add(estadoConexion, BorderLayout.NORTH);
+        add(construirBarraLateral(), BorderLayout.WEST);
 
-        JTable tablaProductos = new JTable(productosModel);
-        JTable tablaPedidos = new JTable(pedidosModel);
+        contenido.add(ventaPanel, "vender");
+        contenido.add(mesasPanel, "mesas");
+        contenido.add(cocinaPanel, "cocina");
+        contenido.add(adminPanel, "admin");
+        add(contenido, BorderLayout.CENTER);
 
-        JPanel panelProductos = new JPanel(new BorderLayout());
-        panelProductos.setBorder(BorderFactory.createTitledBorder("Catálogo"));
-        panelProductos.add(new JScrollPane(tablaProductos), BorderLayout.CENTER);
+        mostrarPantalla("vender");
+        refrescarDatos();
 
-        JPanel panelPedidos = new JPanel(new BorderLayout());
-        panelPedidos.setBorder(BorderFactory.createTitledBorder("Pedidos"));
-        panelPedidos.add(new JScrollPane(tablaPedidos), BorderLayout.CENTER);
-
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, panelProductos, panelPedidos);
-        split.setResizeWeight(0.4);
-        add(split, BorderLayout.CENTER);
-
-        JPanel panelBotones = new JPanel();
-        JButton btnRefrescar = new JButton("Refrescar");
-        JButton btnCrearPedido = new JButton("Nuevo pedido de prueba (2 hamburguesas)");
-        JButton btnMarcarListo = new JButton("Marcar seleccionado como 'listo'");
-        panelBotones.add(btnRefrescar);
-        panelBotones.add(btnCrearPedido);
-        panelBotones.add(btnMarcarListo);
-        add(panelBotones, BorderLayout.SOUTH);
-
-        btnRefrescar.addActionListener(e -> refrescarDatos(estadoConexion));
-
-        btnCrearPedido.addActionListener(e -> {
-            try {
-                api.crearPedido("Pedido de prueba desde Java",
-                        List.of(new int[]{1, 2}));
-                refrescarDatos(estadoConexion);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Error al crear pedido: " + ex.getMessage());
-            }
-        });
-
-        btnMarcarListo.addActionListener(e -> {
-            int fila = tablaPedidos.getSelectedRow();
-            if (fila == -1) {
-                JOptionPane.showMessageDialog(this, "Seleccioná un pedido primero.");
-                return;
-            }
-            int pedidoId = (int) pedidosModel.getValueAt(fila, 0);
-            try {
-                api.cambiarEstado(pedidoId, "listo");
-                refrescarDatos(estadoConexion);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Error al cambiar estado: " + ex.getMessage());
-            }
-        });
-
-        refrescarDatos(estadoConexion);
+        // Polling simple cada 4s: alcanza para que el mostrador, las mesas
+        // y la cocina se vean sincronizados entre sí casi al instante, sin
+        // meter WebSockets todavía a esta primera versión de la GUI.
+        Timer timer = new Timer(4000, e -> refrescarDatos());
+        timer.start();
     }
 
-    private void refrescarDatos(JLabel estadoConexion) {
+    private JComponent construirBarraLateral() {
+        JPanel sidebar = new JPanel();
+        sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
+        sidebar.setBackground(UiTheme.SIDEBAR);
+        sidebar.setPreferredSize(new Dimension(190, 0));
+        sidebar.setBorder(BorderFactory.createEmptyBorder(20, 16, 16, 16));
+
+        JPanel marca = new JPanel();
+        marca.setOpaque(false);
+        marca.setLayout(new BoxLayout(marca, BoxLayout.X_AXIS));
+        marca.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel logo = new JLabel(AppIcons.marca(30));
+        marcaTexto.setFont(UiTheme.TITULO);
+        marcaTexto.setForeground(Color.WHITE);
+        marcaTexto.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
+        marca.add(logo);
+        marca.add(marcaTexto);
+        sidebar.add(marca);
+        sidebar.add(Box.createVerticalStrut(28));
+
+        sidebar.add(crearBotonNav("Vender", AppIcons.vender(Color.WHITE), "vender"));
+        sidebar.add(Box.createVerticalStrut(8));
+        sidebar.add(crearBotonNav("Mesas", AppIcons.mesas(Color.WHITE), "mesas"));
+        sidebar.add(Box.createVerticalStrut(8));
+        sidebar.add(crearBotonNav("Cocina", AppIcons.cocina(Color.WHITE), "cocina"));
+        sidebar.add(Box.createVerticalStrut(8));
+        sidebar.add(crearBotonNav("Admin", AppIcons.admin(Color.WHITE), "admin"));
+
+        sidebar.add(Box.createVerticalGlue());
+
+        JPanel estadoPanel = new JPanel();
+        estadoPanel.setOpaque(false);
+        estadoPanel.setLayout(new BoxLayout(estadoPanel, BoxLayout.X_AXIS));
+        estadoPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        estadoDot.setForeground(UiTheme.PELIGRO);
+        estadoTexto.setForeground(new Color(0xB8, 0xBA, 0xC4));
+        estadoTexto.setFont(UiTheme.TEXTO_BASE.deriveFont(11f));
+        estadoPanel.add(estadoDot);
+        estadoPanel.add(Box.createHorizontalStrut(6));
+        estadoPanel.add(estadoTexto);
+        sidebar.add(estadoPanel);
+
+        return sidebar;
+    }
+
+    private NavButton crearBotonNav(String texto, javax.swing.Icon icono, String card) {
+        NavButton btn = new NavButton(texto, icono);
+        btn.addActionListener(e -> mostrarPantalla(card));
+        botonesNav.put(card, btn);
+        return btn;
+    }
+
+    private void mostrarPantalla(String card) {
+        cardLayout.show(contenido, card);
+        botonesNav.forEach((clave, boton) -> boton.setSeleccionado(clave.equals(card)));
+    }
+
+    private void refrescarDatos() {
         boolean vivo = api.healthCheck();
-        estadoConexion.setText(vivo
-                ? "Backend Python: conectado (http://127.0.0.1:8000)"
-                : "Backend Python: SIN CONEXIÓN - arrancá primero el servidor (uvicorn)");
+        estadoDot.setForeground(vivo ? UiTheme.EXITO : UiTheme.PELIGRO);
+        estadoTexto.setText(vivo ? "Backend conectado" : "Backend caído");
 
         if (!vivo) return;
 
         try {
-            productosModel.setRowCount(0);
-            for (Producto p : api.listarProductos()) {
-                productosModel.addRow(new Object[]{p.id, p.nombre, p.precio, p.stock});
+            List<Producto> productos = api.listarProductos();
+            List<Pedido> pedidos = api.listarPedidos();
+            List<Mesa> mesas = api.listarMesas();
+            Configuracion config = api.obtenerConfiguracion();
+
+            ventaPanel.setProductos(productos);
+            mesasPanel.setProductos(productos);
+            mesasPanel.setMesas(mesas);
+            cocinaPanel.setPedidos(pedidos);
+            adminPanel.setProductos(productos);
+            adminPanel.setMesas(mesas);
+            adminPanel.setConfiguracion(config);
+            // /admin se pide una sola vez: los datos del dueño no cambian
+            // desde otra pantalla, y así no se pisa lo que se está tipeando.
+            if (adminPanel.necesitaAdmin()) {
+                adminPanel.setAdmin(api.obtenerAdmin());
             }
 
-            pedidosModel.setRowCount(0);
-            for (Pedido p : api.listarPedidos()) {
-                pedidosModel.addRow(new Object[]{p.id, p.fecha, p.estado, p.total, p.nota});
+            if (!marcaTexto.getText().equals(config.nombreLocal)) {
+                marcaTexto.setText(config.nombreLocal);
+                setTitle(config.nombreLocal);
             }
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al cargar datos: " + ex.getMessage());
+            estadoTexto.setText("Error al sincronizar");
         }
     }
 }

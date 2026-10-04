@@ -5,14 +5,18 @@ Punto clave de la arquitectura: la GUI Java le habla a este backend Python
 por HTTP en localhost, como un mozo que pasa el pedido por una ventanita y
 espera el plato listo.
 
+Generar una secret key con el comando:
+    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
 Correr con:
-    uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+    python -m uvicorn app.main:app --env-file app/.env --host 127.0.0.1 --port 8000 --reload
 
 La GUI Java (ver ApiClient.java) apunta a http://127.0.0.1:8000
 """
 
 import asyncio
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,8 +25,10 @@ from .concurrency import (
     pedido_executor,
     shutdown_executor,
     start_backup_thread,
+    start_resumen_thread,
     start_stock_watcher,
     stop_backup_thread,
+    stop_resumen_thread,
     stop_stock_watcher,
 )
 
@@ -33,14 +39,30 @@ from .concurrency import (
     stop_stock_watcher,
 )
 from .database import get_connection, init_db, write_lock
+from .mailer import (
+    EmailError,
+    enviar_email,
+    leer_config_email,
+    obtener_email_destino_efectivo,
+)
+from .resumen import armar_email_resumen, calcular_resumen
+from .secrets import SecretConfigurationError, encrypt_secret
 from .models import (
     ProductoIn,
     ProductoOut,
+    ProductoPatch,
     PedidoIn,
     PedidoOut,
     DetalleOut,
     EstadoIn,
+    MesaIn,
+    MesaOut,
+    CuentaOut,
+    ConfiguracionIn,
+    ConfiguracionOut,
     AlertaOut,
+    AdminIn,
+    AdminOut,
 )
 
 app = FastAPI(title="Barra - Backend de Pedidos")
@@ -60,10 +82,12 @@ def on_startup():
     init_db()
     start_stock_watcher()
     start_backup_thread()
+    start_resumen_thread()
 
 
 @app.on_event("shutdown")
 def on_shutdown():
+    stop_resumen_thread()
     stop_backup_thread()
     stop_stock_watcher()
     shutdown_executor()
@@ -73,6 +97,219 @@ def health():
     """La GUI Java llama esto al arrancar para confirmar que el backend
     (que ella misma o el instalador ya debería tener corriendo) está vivo."""
     return {"status": "ok"}
+
+
+# ---------- Configuración (panel de Admin) ----------
+
+def obtener_email_destino_efectivo(conn, email_destino: str | None) -> str | None:
+    """A dónde se mandan las alertas y el resumen diario: email_destino de
+    /configuracion si está cargado, sino el email del dueño de /admin.
+    Así alcanza con completar los datos del dueño una sola vez. El envío
+    de mails (próximas tareas) tiene que usar esta misma función."""
+    if email_destino:
+        return email_destino
+    fila = conn.execute("SELECT email_dueno FROM admin WHERE id = 1").fetchone()
+    return (fila["email_dueno"] or None) if fila else None
+
+
+def _configuracion_a_dict(conn, row) -> dict:
+    datos = dict(row)
+    datos["email_habilitado"] = bool(datos["email_habilitado"])
+    datos["resumen_diario_habilitado"] = bool(datos["resumen_diario_habilitado"])
+    datos["smtp_password_configurada"] = bool(datos["smtp_password_cifrada"])
+    datos["email_destino_efectivo"] = obtener_email_destino_efectivo(conn, datos["email_destino"])
+    datos.pop("smtp_password_cifrada", None)
+    return datos
+
+
+def _validar_configuracion_email(conn, valores: dict) -> None:
+    """Si las alertas por email o el resumen diario están habilitados, la
+    configuración SMTP tiene que estar completa. Se valida sobre el estado
+    FINAL (ya mergeado con lo que había en la base, ver actualizar_configuracion),
+    no solo sobre los campos que vinieron en este request puntual - así no
+    se puede terminar con el email "habilitado" pero a medio configurar
+    después de varios PUT sucesivos que solo tocan un campo por vez.
+
+    El destino puede faltar en /configuracion si el dueño ya tiene su
+    email cargado en /admin (ver obtener_email_destino_efectivo). El
+    formato de email_destino ya lo valida ConfiguracionIn."""
+    if not (valores["email_habilitado"] or valores["resumen_diario_habilitado"]):
+        return
+
+    faltantes = [
+        campo for campo in ("smtp_host", "smtp_usuario", "smtp_password_cifrada")
+        if not valores.get(campo)
+    ]
+    if not obtener_email_destino_efectivo(conn, valores["email_destino"]):
+        faltantes.append("email_destino (o el email del dueño en /admin)")
+    if faltantes:
+        raise HTTPException(
+            400,
+            "Para habilitar el email hacen falta: " + ", ".join(faltantes).replace(
+                "smtp_password_cifrada", "smtp_password"
+            ),
+        )
+
+
+@app.get("/configuracion", response_model=ConfiguracionOut)
+def obtener_configuracion():
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
+    return _configuracion_a_dict(conn, row)
+
+
+@app.post("/configuracion", response_model=ConfiguracionOut)
+@app.put("/configuracion", response_model=ConfiguracionOut)
+def actualizar_configuracion(config: ConfiguracionIn):
+    """Actualización parcial: solo se pisa lo que venga en el body."""
+    conn = get_connection()
+    with write_lock:
+        actual = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
+        campos_recibidos = config.model_fields_set
+        valores = {
+            "nombre_local": actual["nombre_local"],
+            "umbral_stock_global": actual["umbral_stock_global"],
+            "email_habilitado": actual["email_habilitado"],
+            "email_destino": actual["email_destino"],
+            "smtp_host": actual["smtp_host"],
+            "smtp_port": actual["smtp_port"],
+            "smtp_usuario": actual["smtp_usuario"],
+            "smtp_password_cifrada": actual["smtp_password_cifrada"],
+            "resumen_diario_habilitado": actual["resumen_diario_habilitado"],
+            "resumen_diario_hora": actual["resumen_diario_hora"],
+        }
+
+        campos_sin_secretos = (
+            "nombre_local", "umbral_stock_global", "email_habilitado",
+            "email_destino", "smtp_host", "smtp_port", "smtp_usuario",
+            "resumen_diario_habilitado", "resumen_diario_hora",
+        )
+        for campo in campos_sin_secretos:
+            if campo in campos_recibidos:
+                valor = getattr(config, campo)
+                valores[campo] = int(valor) if isinstance(valor, bool) else valor
+
+        if "smtp_password" in campos_recibidos:
+            try:
+                valores["smtp_password_cifrada"] = (
+                    encrypt_secret(config.smtp_password)
+                    if config.smtp_password
+                    else None
+                )
+            except SecretConfigurationError as exc:
+                raise HTTPException(503, str(exc)) from exc
+
+        # valores ya tiene el estado FINAL (lo que había + lo nuevo que
+        # vino en este request) -> se valida acá, antes de escribir nada.
+        _validar_configuracion_email(conn, valores)
+
+        conn.execute(
+            """UPDATE configuracion SET
+               nombre_local = ?, umbral_stock_global = ?,
+               email_habilitado = ?, email_destino = ?, smtp_host = ?,
+               smtp_port = ?, smtp_usuario = ?, smtp_password_cifrada = ?,
+               resumen_diario_habilitado = ?, resumen_diario_hora = ?
+               WHERE id = 1""",
+            tuple(valores.values()),
+        )
+        conn.commit()
+    row = conn.execute("SELECT * FROM configuracion WHERE id = 1").fetchone()
+    return _configuracion_a_dict(conn, row)
+
+@app.post("/configuracion/probar-email")
+def probar_email():
+    """Manda un email de prueba con la configuración SMTP guardada, para
+    que el dueño confirme desde el panel de Admin que todo funciona antes
+    de depender de las alertas. No hace falta tener el email habilitado.
+    Responde 400 con el motivo si no se pudo mandar."""
+    conn = get_connection()
+    with write_lock:
+        try:
+            config = leer_config_email(conn)
+        except EmailError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    # Afuera del lock: la conexión SMTP puede tardar varios segundos.
+    try:
+        enviar_email(
+            config,
+            f"[{config.nombre_local}] Email de prueba",
+            f"Si te llegó este email, la configuración de {config.nombre_local} "
+            "está lista para mandarte alertas de stock y el resumen diario.\n\n-- Barra",
+        )
+    except EmailError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"enviado_a": config.destino}
+
+
+
+# ---------- Resumen diario de ventas ----------
+
+def _hasta_ahora() -> datetime:
+    """Límite superior para los resúmenes "hasta ahora". El período es
+    [desde, hasta) y pedido.fecha tiene precisión de segundos, así que se
+    suma 1 segundo para no dejar afuera un pedido hecho en este mismo
+    segundo."""
+    return datetime.now().replace(microsecond=0) + timedelta(seconds=1)
+
+
+@app.get("/resumen-diario")
+def ver_resumen_diario(horas: int = 24):
+    """Resumen de ventas de las últimas `horas` (24 por defecto) hasta
+    ahora, sin mandar nada. Sirve para ver qué va a llegar por email (y
+    para probar desde /docs)."""
+    if not 1 <= horas <= 24 * 31:
+        raise HTTPException(400, "horas tiene que estar entre 1 y 744")
+    hasta = _hasta_ahora()
+    conn = get_connection()
+    with write_lock:
+        return calcular_resumen(conn, hasta - timedelta(hours=horas), hasta)
+
+
+@app.post("/resumen-diario/enviar")
+def enviar_resumen_diario():
+    """Manda YA el resumen de las últimas 24hs, sin esperar a la hora
+    programada. No cuenta como el resumen del día: el automático se sigue
+    mandando a resumen_diario_hora como siempre."""
+    hasta = _hasta_ahora()
+    conn = get_connection()
+    with write_lock:
+        resumen = calcular_resumen(conn, hasta - timedelta(days=1), hasta)
+        try:
+            config = leer_config_email(conn)
+        except EmailError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    asunto, cuerpo = armar_email_resumen(config.nombre_local, resumen)
+    try:
+        enviar_email(config, asunto, cuerpo)
+    except EmailError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"enviado_a": config.destino}
+
+@app.get("/admin", response_model=AdminOut)
+def obtener_admin():
+    """Datos del dueño del local (nombre, email de contacto, teléfono).
+    Se completan una sola vez desde el panel de Admin y se usan como
+    valor por defecto de email_destino cuando se habilite el envío de
+    alertas/resumen diario, si ese campo todavía no fue definido en
+    /configuracion."""
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM admin WHERE id = 1").fetchone()
+    return dict(row)
+
+
+@app.put("/admin", response_model=AdminOut)
+def actualizar_admin(datos: AdminIn):
+    conn = get_connection()
+    with write_lock:
+        conn.execute(
+            "UPDATE admin SET nombre_dueno = ?, email_dueno = ?, telefono = ? WHERE id = 1",
+            (datos.nombre_dueno, datos.email_dueno, datos.telefono),
+        )
+        conn.commit()
+    row = conn.execute("SELECT * FROM admin WHERE id = 1").fetchone()
+    return dict(row)
 
 
 @app.get("/alertas", response_model=list[AlertaOut])
@@ -101,13 +338,189 @@ def crear_producto(producto: ProductoIn):
     conn = get_connection()
     with write_lock:
         cur = conn.execute(
-            "INSERT INTO producto (nombre, precio, stock) VALUES (?, ?, ?)",
-            (producto.nombre, producto.precio, producto.stock),
+            "INSERT INTO producto (nombre, precio, stock, disponible, umbral_stock) VALUES (?, ?, ?, ?, ?)",
+            (producto.nombre, producto.precio, producto.stock, int(producto.disponible), producto.umbral_stock),
         )
         conn.commit()
         nuevo_id = cur.lastrowid
     row = conn.execute("SELECT * FROM producto WHERE id = ?", (nuevo_id,)).fetchone()
     return dict(row)
+
+
+@app.patch("/productos/{producto_id}", response_model=ProductoOut)
+def editar_producto(producto_id: int, cambios: ProductoPatch):
+    """Alta/edición desde el panel de Admin: nombre, precio, stock y si el
+    producto está disponible para vender (independiente del stock - sirve
+    para pausar un producto sin perder el conteo, ej. 'hoy no hay pescado').
+
+    umbral_stock se resuelve distinto al resto: null es un valor válido
+    con significado propio ("usar el umbral global"), así que hace falta
+    mirar qué campos vinieron realmente en el body (model_fields_set) en
+    vez de solo chequear "is not None" como con nombre/precio/stock."""
+    conn = get_connection()
+    with write_lock:
+        row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Producto no encontrado")
+        nombre = cambios.nombre if cambios.nombre is not None else row["nombre"]
+        precio = cambios.precio if cambios.precio is not None else row["precio"]
+        stock = cambios.stock if cambios.stock is not None else row["stock"]
+        disponible = cambios.disponible if cambios.disponible is not None else bool(row["disponible"])
+        if "umbral_stock" in cambios.model_fields_set:
+            umbral_stock = cambios.umbral_stock
+        else:
+            umbral_stock = row["umbral_stock"]
+        conn.execute(
+            "UPDATE producto SET nombre = ?, precio = ?, stock = ?, disponible = ?, umbral_stock = ? WHERE id = ?",
+            (nombre, precio, stock, int(disponible), umbral_stock, producto_id),
+        )
+        conn.commit()
+    row = conn.execute("SELECT * FROM producto WHERE id = ?", (producto_id,)).fetchone()
+    return dict(row)
+
+
+# ---------- Mesas y cuentas (salón) ----------
+
+def _mesa_a_dict(conn, mesa_row) -> dict:
+    cuenta_row = conn.execute(
+        "SELECT * FROM cuenta WHERE mesa_id = ? AND estado = 'abierta'", (mesa_row["id"],)
+    ).fetchone()
+    cuenta_id = None
+    total_actual = 0.0
+    if cuenta_row is not None:
+        cuenta_id = cuenta_row["id"]
+        total_actual = conn.execute(
+            "SELECT COALESCE(SUM(total), 0) AS t FROM pedido WHERE cuenta_id = ?", (cuenta_id,)
+        ).fetchone()["t"]
+    return {
+        "id": mesa_row["id"],
+        "nombre": mesa_row["nombre"],
+        "estado": mesa_row["estado"],
+        "cuenta_id": cuenta_id,
+        "total_actual": total_actual,
+    }
+
+
+@app.get("/mesas", response_model=list[MesaOut])
+def listar_mesas():
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM mesa ORDER BY id").fetchall()
+    return [_mesa_a_dict(conn, r) for r in rows]
+
+
+@app.post("/mesas", response_model=MesaOut, status_code=201)
+def crear_mesa(mesa: MesaIn):
+    conn = get_connection()
+    with write_lock:
+        cur = conn.execute("INSERT INTO mesa (nombre, estado) VALUES (?, 'libre')", (mesa.nombre,))
+        conn.commit()
+        nueva_id = cur.lastrowid
+    row = conn.execute("SELECT * FROM mesa WHERE id = ?", (nueva_id,)).fetchone()
+    return _mesa_a_dict(conn, row)
+
+
+@app.delete("/mesas/{mesa_id}", status_code=204)
+def eliminar_mesa(mesa_id: int):
+    conn = get_connection()
+    with write_lock:
+        row = conn.execute("SELECT * FROM mesa WHERE id = ?", (mesa_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Mesa no encontrada")
+        if row["estado"] != "libre":
+            raise HTTPException(400, "No se puede borrar una mesa con la cuenta abierta")
+        conn.execute("DELETE FROM mesa WHERE id = ?", (mesa_id,))
+        conn.commit()
+
+
+@app.post("/mesas/{mesa_id}/abrir", response_model=MesaOut)
+def abrir_mesa(mesa_id: int):
+    """El mozo toca la mesa libre: se abre una cuenta nueva que va a ir
+    acumulando pedidos hasta que se cierre (ver /mesas/{id}/cerrar)."""
+    conn = get_connection()
+    with write_lock:
+        row = conn.execute("SELECT * FROM mesa WHERE id = ?", (mesa_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Mesa no encontrada")
+        cuenta_abierta = conn.execute(
+            "SELECT * FROM cuenta WHERE mesa_id = ? AND estado = 'abierta'", (mesa_id,)
+        ).fetchone()
+        if cuenta_abierta is None:
+            conn.execute(
+                "INSERT INTO cuenta (mesa_id, fecha_apertura, estado) VALUES (?, ?, 'abierta')",
+                (mesa_id, datetime.now().isoformat(timespec="seconds")),
+            )
+            conn.execute("UPDATE mesa SET estado = 'ocupada' WHERE id = ?", (mesa_id,))
+            conn.commit()
+    row = conn.execute("SELECT * FROM mesa WHERE id = ?", (mesa_id,)).fetchone()
+    return _mesa_a_dict(conn, row)
+
+
+def _cuenta_a_dict(conn, cuenta_row) -> dict:
+    mesa_row = conn.execute("SELECT * FROM mesa WHERE id = ?", (cuenta_row["mesa_id"],)).fetchone()
+    pedidos_rows = conn.execute(
+        "SELECT * FROM pedido WHERE cuenta_id = ? ORDER BY id", (cuenta_row["id"],)
+    ).fetchall()
+    pedidos = [_pedido_a_dict(conn, r) for r in pedidos_rows]
+    total = sum(p["total"] for p in pedidos)
+    return {
+        "id": cuenta_row["id"],
+        "mesa_id": cuenta_row["mesa_id"],
+        "mesa_nombre": mesa_row["nombre"] if mesa_row else "",
+        "fecha_apertura": cuenta_row["fecha_apertura"],
+        "fecha_cierre": cuenta_row["fecha_cierre"],
+        "estado": cuenta_row["estado"],
+        "pedidos": pedidos,
+        "total": total,
+    }
+
+
+@app.get("/mesas/{mesa_id}/cuenta", response_model=CuentaOut)
+def obtener_cuenta_mesa(mesa_id: int):
+    conn = get_connection()
+    cuenta_row = conn.execute(
+        "SELECT * FROM cuenta WHERE mesa_id = ? AND estado = 'abierta'", (mesa_id,)
+    ).fetchone()
+    if cuenta_row is None:
+        raise HTTPException(404, "La mesa no tiene una cuenta abierta")
+    return _cuenta_a_dict(conn, cuenta_row)
+
+
+@app.post("/mesas/{mesa_id}/pedidos", response_model=PedidoOut, status_code=201)
+def crear_pedido_mesa(mesa_id: int, pedido: PedidoIn):
+    """Suma una ronda de pedido a la cuenta abierta de la mesa (el comensal
+    puede seguir pidiendo mientras la cuenta siga abierta)."""
+    conn = get_connection()
+    with write_lock:
+        cuenta_row = conn.execute(
+            "SELECT * FROM cuenta WHERE mesa_id = ? AND estado = 'abierta'", (mesa_id,)
+        ).fetchone()
+        if cuenta_row is None:
+            raise HTTPException(400, "La mesa no tiene una cuenta abierta - abrila primero")
+        pedido_id = _insertar_pedido(conn, pedido, cuenta_id=cuenta_row["id"])
+    row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
+    return _pedido_a_dict(conn, row)
+
+
+@app.post("/mesas/{mesa_id}/cerrar", response_model=CuentaOut)
+def cerrar_mesa(mesa_id: int):
+    """Cierra la cuenta de la mesa y la deja libre otra vez. Devuelve la
+    cuenta completa (todas las rondas + total) para armar el ticket."""
+    conn = get_connection()
+    with write_lock:
+        cuenta_row = conn.execute(
+            "SELECT * FROM cuenta WHERE mesa_id = ? AND estado = 'abierta'", (mesa_id,)
+        ).fetchone()
+        if cuenta_row is None:
+            raise HTTPException(400, "La mesa no tiene una cuenta abierta")
+        conn.execute(
+            "UPDATE cuenta SET estado = 'cerrada', fecha_cierre = ? WHERE id = ?",
+            (datetime.now().isoformat(timespec="seconds"), cuenta_row["id"]),
+        )
+        conn.execute("UPDATE mesa SET estado = 'libre' WHERE id = ?", (mesa_id,))
+        conn.commit()
+        cuenta_id = cuenta_row["id"]
+    row = conn.execute("SELECT * FROM cuenta WHERE id = ?", (cuenta_id,)).fetchone()
+    return _cuenta_a_dict(conn, row)
 
 
 # ---------- Pedidos ----------
@@ -123,14 +536,74 @@ def _pedido_a_dict(conn, pedido_row) -> dict:
         """,
         (pedido_row["id"],),
     ).fetchall()
+
+    mesa_nombre = None
+    if pedido_row["cuenta_id"] is not None:
+        fila = conn.execute(
+            """
+            SELECT mesa.nombre AS nombre
+            FROM cuenta JOIN mesa ON mesa.id = cuenta.mesa_id
+            WHERE cuenta.id = ?
+            """,
+            (pedido_row["cuenta_id"],),
+        ).fetchone()
+        mesa_nombre = fila["nombre"] if fila else None
+
     return {
         "id": pedido_row["id"],
         "fecha": pedido_row["fecha"],
         "estado": pedido_row["estado"],
         "total": pedido_row["total"],
         "nota": pedido_row["nota"],
+        "mesa_nombre": mesa_nombre,
         "detalles": [dict(d) for d in detalles_rows],
     }
+
+
+def _insertar_pedido(conn, pedido: PedidoIn, cuenta_id: int | None) -> int:
+    """
+    Registra un pedido y descuenta stock. Todo protegido por write_lock:
+    esto es la semilla del punto 3 (pool de hilos + lock sobre stock
+    compartido), que todavía no está implementado con concurrencia real,
+    pero la sección crítica ya queda aislada acá adentro.
+
+    Compartida entre el mostrador (POST /pedidos, cuenta_id=None) y las
+    mesas (POST /mesas/{id}/pedidos, cuenta_id=la cuenta abierta) para no
+    duplicar la validación de stock/disponibilidad.
+    """
+    total = 0.0
+    for det in pedido.detalles:
+        row = conn.execute("SELECT * FROM producto WHERE id = ?", (det.producto_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, f"Producto {det.producto_id} no existe")
+        if not row["disponible"]:
+            raise HTTPException(400, f"'{row['nombre']}' no está disponible")
+        if row["stock"] < det.cantidad:
+            raise HTTPException(
+                400,
+                f"Stock insuficiente para '{row['nombre']}' "
+                f"(pedido: {det.cantidad}, stock: {row['stock']})",
+            )
+        total += row["precio"] * det.cantidad
+
+    cur = conn.execute(
+        "INSERT INTO pedido (fecha, estado, total, nota, cuenta_id) VALUES (?, ?, ?, ?, ?)",
+        (datetime.now().isoformat(timespec="seconds"), "en_preparacion", total, pedido.nota, cuenta_id),
+    )
+    pedido_id = cur.lastrowid
+
+    for det in pedido.detalles:
+        conn.execute(
+            "INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad) VALUES (?, ?, ?)",
+            (pedido_id, det.producto_id, det.cantidad),
+        )
+        conn.execute(
+            "UPDATE producto SET stock = stock - ? WHERE id = ?",
+            (det.cantidad, det.producto_id),
+        )
+
+    conn.commit()
+    return pedido_id
 
 
 @app.get("/pedidos", response_model=list[PedidoOut])
@@ -149,52 +622,16 @@ def _procesar_pedido(pedido: PedidoIn) -> dict:
     al mismo tiempo, pero solo uno a la vez toca la base.
     """
     conn = get_connection()
-
     with write_lock:
-        # 1. Validar stock disponible de todos los productos primero
-        total = 0.0
-        productos_cache = {}
-        for det in pedido.detalles:
-            row = conn.execute(
-                "SELECT * FROM producto WHERE id = ?", (det.producto_id,)
-            ).fetchone()
-            if row is None:
-                raise HTTPException(404, f"Producto {det.producto_id} no existe")
-            if row["stock"] < det.cantidad:
-                raise HTTPException(
-                    400,
-                    f"Stock insuficiente para '{row['nombre']}' "
-                    f"(pedido: {det.cantidad}, stock: {row['stock']})",
-                )
-            productos_cache[det.producto_id] = row
-            total += row["precio"] * det.cantidad
-
-        # 2. Crear el pedido
-        cur = conn.execute(
-            "INSERT INTO pedido (fecha, estado, total, nota) VALUES (?, ?, ?, ?)",
-            (datetime.now().isoformat(timespec="seconds"), "en_preparacion", total, pedido.nota),
-        )
-        pedido_id = cur.lastrowid
-
-        # 3. Insertar detalle y descontar stock
-        for det in pedido.detalles:
-            conn.execute(
-                "INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad) VALUES (?, ?, ?)",
-                (pedido_id, det.producto_id, det.cantidad),
-            )
-            conn.execute(
-                "UPDATE producto SET stock = stock - ? WHERE id = ?",
-                (det.cantidad, det.producto_id),
-            )
-
-        conn.commit()
-
+        pedido_id = _insertar_pedido(conn, pedido, cuenta_id=None)
     row = conn.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,)).fetchone()
     return _pedido_a_dict(conn, row)
 
 @app.post("/pedidos", response_model=PedidoOut, status_code=201)
 async def crear_pedido(pedido: PedidoIn):
     """
+    Pedido de mostrador/para llevar, sin mesa asociada.
+
     Punto de entrada HTTP. No procesa nada acá: delega el trabajo al
     pedido_executor (ThreadPoolExecutor real, ver concurrency.py) y espera
     el resultado sin bloquear el event loop. Si llegan varios pedidos a

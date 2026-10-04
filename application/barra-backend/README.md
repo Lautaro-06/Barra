@@ -75,19 +75,19 @@ nunca se devuelve: la API solo informa `smtp_password_configurada` (bool).
   (`Connection.backup`). Retiene como máximo `BARRA_BACKUP_MAX_COPIES`
   copias (default 5), borrando las más viejas.
 
-## Qué falta (próximos puntos del proyecto)
+## Configuración (`app/main.py`, `app/mailer.py`, `app/resumen.py`)
 
-- Umbral de stock por producto (`producto.umbral_stock` ya existe en la
+- [x] Umbral de stock por producto (`producto.umbral_stock` ya existe en la
   tabla, falta exponerlo en `ProductoIn/Out/Patch` y usarlo en el watcher
   con prioridad: umbral del producto si existe, sino el global).
-- El watcher de stock todavía no distingue el momento exacto en que un
+- [x] El watcher de stock todavía no distingue el momento exacto en que un
   producto cruza el umbral (hoy solo mira "¿está bajo ahora?" en cada
   chequeo) - falta esa lógica para no repetir la misma alerta sin parar.
-- Servicio de envío de emails (usando la config SMTP ya validada), armado
+- [x] Servicio de envío de emails (usando la config SMTP ya validada), armado
   del resumen diario de ventas, y un scheduler que lo dispare a la hora
   configurada en `resumen_diario_hora`.
-- Actualizar la GUI Java: sección de alertas/SMTP/resumen diario en el
+- [x] Actualizar la GUI Java: sección de alertas/SMTP/resumen diario en el
   panel de Admin y botón "Probar email".
-- Tests de backend y confirmar que el proyecto Java sigue compilando con
+- [x] Tests de backend y confirmar que el proyecto Java sigue compilando con
   Maven después de estos cambios.
 - Empaquetado con PyInstaller.

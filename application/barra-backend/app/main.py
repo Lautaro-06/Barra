@@ -5,8 +5,11 @@ Punto clave de la arquitectura: la GUI Java le habla a este backend Python
 por HTTP en localhost, como un mozo que pasa el pedido por una ventanita y
 espera el plato listo.
 
+Generar una secret key con el comando:
+    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
 Correr con:
-    uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+    python -m uvicorn app.main:app --env-file app/.env --host 127.0.0.1 --port 8000 --reload
 
 La GUI Java (ver ApiClient.java) apunta a http://127.0.0.1:8000
 """

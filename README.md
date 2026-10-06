@@ -1,4 +1,4 @@
-# Barra
+![Banner Logo](./docs/design/Barra%20-%20Banner.png)
 
 ## Descripcion
 

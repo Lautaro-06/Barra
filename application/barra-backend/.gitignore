@@ -8,5 +8,5 @@ barra.db
 venv/
 
 # Bytecode compilado
-barra-backend/app/__pycache__/
+app/__pycache__/
 *.pyc

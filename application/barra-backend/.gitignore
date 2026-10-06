@@ -10,3 +10,7 @@ venv/
 # Bytecode compilado
 app/__pycache__/
 *.pyc
+build/
+dist/*
+!dist/*.exe
+*.spec

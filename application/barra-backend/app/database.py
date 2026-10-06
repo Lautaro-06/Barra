@@ -16,10 +16,26 @@ de vigilancia de stock se agregan en el siguiente paso del proyecto.
 """
 
 import sqlite3
+import sys
 import threading
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "barra.db"
+
+def _carpeta_base() -> Path:
+    """Carpeta donde vive 'barra.db' de verdad.
+
+    - En desarrollo (python/uvicorn): la raíz del proyecto, igual que antes.
+    - Empaquetado con PyInstaller (--onefile): la carpeta donde está el
+      .exe, NO la carpeta temporal donde PyInstaller descomprime el código
+      (esa se borra al cerrar el programa, así que guardar ahí = perder
+      la base cada vez que se cierra la app).
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent
+
+
+DB_PATH = _carpeta_base() / "barra.db"
 
 # Lock global de escritura: aunque SQLite ya serializa a nivel de archivo,
 # este lock evita condiciones de carrera dentro de nuestra propia lógica

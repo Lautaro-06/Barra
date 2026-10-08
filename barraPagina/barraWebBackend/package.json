@@ -1,0 +1,23 @@
+{
+  "name": "barra-web-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend de la web de venta de Barra (compras, licencias, admin)",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "node --watch src/app.js",
+    "start": "node src/app.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mercadopago": "^2.0.15",
+    "mysql2": "^3.11.0",
+    "nanoid": "^5.0.7",
+    "nodemailer": "^6.9.14"
+  }
+}

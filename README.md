@@ -51,8 +51,6 @@ Barra/
 │   │   └── requirements.txt # Librerías instaladas
 │   ├── barra-gui/ # JavaFX
 │   │   ├── src/main/java/com/barra/gui/ # Archivos de las clases en texto plano
-│   │   ├── target/ # Archivos compilados en bytecode
-│   │   │   └── barra-gui-1.0.0.jar # Ejecutable GUI Barra
 │   │   ├── README.md
 │   │   └── pom.xml # Compila, prueba y empaqueta el proyecto
 ├── barraPagina/ # Full-stack de la página de venta e instalación

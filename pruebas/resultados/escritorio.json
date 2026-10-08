@@ -1,0 +1,274 @@
+[
+  {
+    "id": "CP-01",
+    "req": "RNF03",
+    "nombre": "Primer arranque crea la base con datos de ejemplo",
+    "esperado": "3 productos, 6 mesas, local 'Mi local'",
+    "obtenido": "3 productos, 6 mesas, local 'Mi local'",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-02",
+    "req": "RF13",
+    "nombre": "Backup automático al arrancar",
+    "esperado": "Un archivo barra_backup_*.db y una línea OK en backups.log",
+    "obtenido": "1 backup(s); log: 2026-10-08T18:49:28 | OK | barra_backup_20261008_184928.db | 36864 bytes",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-03",
+    "req": "RF08",
+    "nombre": "Alta de producto",
+    "esperado": "HTTP 201, disponible por defecto, sin umbral propio",
+    "obtenido": "HTTP 201, id 4, disponible=True",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-04",
+    "req": "RF08",
+    "nombre": "Alta con precio 0 se rechaza",
+    "esperado": "HTTP 422",
+    "obtenido": "HTTP 422",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-05",
+    "req": "RF08",
+    "nombre": "Modificación parcial de producto (precio y umbral)",
+    "esperado": "Cambia solo lo enviado; umbral null = usar el global",
+    "obtenido": "precio 1600.0, umbral 3 -> None (vuelve al global), resto sin cambios",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-06",
+    "req": "RF08",
+    "nombre": "Baja lógica: producto no disponible no se puede vender",
+    "esperado": "HTTP 400 «no está disponible»",
+    "obtenido": "HTTP 400: 'Empanada' no está disponible",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-07",
+    "req": "RF08",
+    "nombre": "Producto inexistente",
+    "esperado": "HTTP 404",
+    "obtenido": "HTTP 404",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-08",
+    "req": "RF01, RF02, RF05",
+    "nombre": "Registrar pedido de mostrador con nota",
+    "esperado": "HTTP 201, total = Σ precio×cantidad, estado en_preparacion, stock descontado",
+    "obtenido": "HTTP 201, total 10800.0 (esperado 10800.0), estado en_preparacion, stock hamburguesa 20→18, gaseosa 40→39",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-09",
+    "req": "RF05",
+    "nombre": "Pedido con más cantidad que el stock",
+    "esperado": "HTTP 400 «Stock insuficiente…» y no se registra nada",
+    "obtenido": "HTTP 400: Stock insuficiente para 'Papas fritas' (pedido: 999, stock: 30)",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-10",
+    "req": "RF01",
+    "nombre": "Pedido con cantidad 0",
+    "esperado": "HTTP 422",
+    "obtenido": "HTTP 422",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-11",
+    "req": "RF03",
+    "nombre": "Cambio de estado del pedido",
+    "esperado": "en_preparacion→listo→entregado OK; estado inválido HTTP 400",
+    "obtenido": "listo HTTP 200, entregado HTTP 200, 'cancelado' HTTP 400",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-12",
+    "req": "RF04",
+    "nombre": "Listado de pedidos para cajero y cocina",
+    "esperado": "GET /pedidos devuelve todos con estado, detalles y total",
+    "obtenido": "HTTP 200, 1 pedido(s) con estado/detalles/total",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-13",
+    "req": "RF09",
+    "nombre": "Ciclo completo de una mesa: abrir, 2 rondas, cerrar",
+    "esperado": "Mesa ocupada→libre, cuenta con 2 rondas y total correcto, ticket con fecha de cierre",
+    "obtenido": "abrir→ocupada, 2 rondas, total mesa 6200.0 (esperado 6200.0), cierre HTTP 200 estado cerrada, mesa vuelve a libre",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-14",
+    "req": "RF09",
+    "nombre": "Ronda en mesa sin cuenta abierta",
+    "esperado": "HTTP 400 «abrila primero»",
+    "obtenido": "HTTP 400: La mesa no tiene una cuenta abierta - abrila primero",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-15",
+    "req": "RF09",
+    "nombre": "Eliminar mesa ocupada",
+    "esperado": "HTTP 400 «No se puede borrar una mesa con la cuenta abierta»",
+    "obtenido": "HTTP 400: No se puede borrar una mesa con la cuenta abierta",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-16",
+    "req": "RF09",
+    "nombre": "Alta y baja de una mesa nunca usada",
+    "esperado": "HTTP 201 y HTTP 204",
+    "obtenido": "alta HTTP 201, baja HTTP 204",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-17",
+    "req": "RF09",
+    "nombre": "Eliminar mesa libre que ya tuvo cuentas",
+    "esperado": "HTTP 204 (o 400 con un motivo claro)",
+    "obtenido": "HTTP 500: Internal Server Error",
+    "resultado": "Falló"
+  },
+  {
+    "id": "CP-18",
+    "req": "RF10",
+    "nombre": "Datos del dueño con email inválido",
+    "esperado": "HTTP 422",
+    "obtenido": "HTTP 422",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-19",
+    "req": "RF10",
+    "nombre": "Sin email de destino, los mails van al dueño",
+    "esperado": "email_destino_efectivo = email del dueño",
+    "obtenido": "email_destino None, efectivo duena@local.test",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-20",
+    "req": "RF11",
+    "nombre": "Habilitar email sin SMTP completo",
+    "esperado": "HTTP 400 con los campos que faltan",
+    "obtenido": "HTTP 400: Para habilitar el email hacen falta: smtp_host, smtp_usuario, smtp_password",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-21",
+    "req": "RF11",
+    "nombre": "Hora de resumen inválida",
+    "esperado": "HTTP 422",
+    "obtenido": "HTTP 422",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-22",
+    "req": "RF11",
+    "nombre": "Email de prueba con contraseña incorrecta",
+    "esperado": "HTTP 400 con el aviso de contraseña (y la pista de Gmail)",
+    "obtenido": "HTTP 400: El servidor SMTP rechazó el usuario/contraseña (en Gmail hace falta una 'contraseña de aplicación')",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-23",
+    "req": "RF11",
+    "nombre": "Email de prueba con STARTTLS y credenciales correctas",
+    "esperado": "HTTP 200 y el mail llega al servidor SMTP",
+    "obtenido": "HTTP 200, enviado a duena@local.test, asunto «[Mi local] Email de prueba»",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-24",
+    "req": "RNF07",
+    "nombre": "La contraseña SMTP se guarda cifrada y nunca se devuelve",
+    "esperado": "Valor Fernet en la base; la API no la expone",
+    "obtenido": "en la base: gAAAAABqx-W4… (Fernet); la API solo devuelve smtp_password_configurada=True",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-25",
+    "req": "RF06",
+    "nombre": "Alerta por email al bajar del umbral",
+    "esperado": "Un mail «[local] Stock bajo: Milanesa» en menos de 30 s y la alerta en /alertas",
+    "obtenido": "mail «['[Mi local] Stock bajo: Milanesa']»; /alertas incluye Milanesa con stock 4",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-26",
+    "req": "RF06",
+    "nombre": "La alerta no se repite mientras sigue bajo",
+    "esperado": "0 mails nuevos",
+    "obtenido": "0 mails nuevos por Milanesa",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-27",
+    "req": "RF06",
+    "nombre": "Después de reponer, la alerta vuelve a funcionar",
+    "esperado": "Llega un nuevo mail al volver a bajar",
+    "obtenido": "volvió a llegar la alerta después de reponer",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-28",
+    "req": "RF07",
+    "nombre": "Resumen de ventas (consulta)",
+    "esperado": "Total, pedidos, mostrador/mesas y productos más vendidos",
+    "obtenido": "6 pedidos, total 106000.0, más vendido: Milanesa, cuentas cerradas 2",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-29",
+    "req": "RF07",
+    "nombre": "Enviar resumen ahora",
+    "esperado": "HTTP 200 y llega el mail con el resumen",
+    "obtenido": "HTTP 200, mail «[Mi local] Resumen de ventas del 08/10: $ 106.000,00»",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-30",
+    "req": "RF12",
+    "nombre": "Resumen diario automático a la hora programada",
+    "esperado": "Llega exactamente 1 resumen",
+    "obtenido": "programado a las 18:49: llegaron 1 resumen(es) en 12 s",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-31",
+    "req": "RNF01",
+    "nombre": "Tiempo de respuesta",
+    "esperado": "Todas las respuestas en menos de 1 s",
+    "obtenido": "GET /productos p95 1.7 ms; POST /pedidos p95 5.2 ms; máximo 7.5 ms",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-32",
+    "req": "RNF05",
+    "nombre": "Pedidos concurrentes sin pérdida ni duplicación",
+    "esperado": "10 aceptados, 20 rechazados, stock 0, 10 pedidos",
+    "obtenido": "30 pedidos simultáneos de 1 unidad con stock 10: 10 aceptados, 20 rechazados, stock final 0, pedidos nuevos 10",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-33",
+    "req": "RNF02",
+    "nombre": "Sin conexión con el servidor de mail se sigue vendiendo",
+    "esperado": "El email falla con aviso; los pedidos funcionan",
+    "obtenido": "email: HTTP 400 (No se pudo mandar el email: [Errno 111] Connection refused…); pedido: HTTP 201; backend sigue respondiendo",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CP-34",
+    "req": "RNF03",
+    "nombre": "Los datos persisten al reiniciar",
+    "esperado": "Mismos pedidos y configuración",
+    "obtenido": "67 pedidos antes y 67 después de reiniciar; dueño «Ana»",
+    "resultado": "Pasó"
+  }
+]

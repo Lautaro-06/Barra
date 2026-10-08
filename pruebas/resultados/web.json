@@ -1,0 +1,138 @@
+[
+  {
+    "id": "CW-01",
+    "req": "RF14",
+    "nombre": "La base se crea sola con los 3 planes",
+    "esperado": "Gratis (10 días, disponible), Pro y Max no disponibles",
+    "obtenido": "HTTP 200: [('Gratis', 0, 10, True), ('Pro', 100, 30, False), ('Max', 150, 365, False)]",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-02",
+    "req": "RF14",
+    "nombre": "Compra sin email",
+    "esperado": "HTTP 400",
+    "obtenido": "HTTP 400: plan_id, comprador.nombre y comprador.email son requeridos",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-03",
+    "req": "RF14",
+    "nombre": "Compra de un plan no disponible",
+    "esperado": "HTTP 409 y no se crea nada",
+    "obtenido": "HTTP 409: Plan no disponible",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-04",
+    "req": "RF14",
+    "nombre": "Compra del plan Gratis",
+    "esperado": "HTTP 201, redirige a /pago-exitoso, mail con código BARRA-XXXX-XXXX-XXXX y clave",
+    "obtenido": "HTTP 201 → /pago-exitoso; mail «Tu licencia de Barra» con código BARRA-VDKX-NTYV-RNJ3 y clave de 64 caracteres",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-05",
+    "req": "RNF07",
+    "nombre": "La clave secreta se guarda hasheada",
+    "esperado": "Hash bcrypt en la base",
+    "obtenido": "secret_hash = $2a$10$… (bcrypt), la clave no se guarda en claro",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-06",
+    "req": "RF15",
+    "nombre": "Activar con clave incorrecta",
+    "esperado": "HTTP 401",
+    "obtenido": "HTTP 401: Credenciales inválidas",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-07",
+    "req": "RF15",
+    "nombre": "Activar con código inexistente",
+    "esperado": "HTTP 404",
+    "obtenido": "HTTP 404: Licencia inexistente",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-08",
+    "req": "RF15",
+    "nombre": "Activar con código y clave correctos",
+    "esperado": "HTTP 200, valido=true, vence en 10 días (plan Gratis)",
+    "obtenido": "HTTP 200, valido=True, vence en 10 días",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-09",
+    "req": "RF15",
+    "nombre": "Segunda activación (máximo 1)",
+    "esperado": "HTTP 403",
+    "obtenido": "HTTP 403: Licencia sin activaciones disponibles",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-10",
+    "req": "RF16",
+    "nombre": "Consultar estado de la licencia",
+    "esperado": "HTTP 200, valido=true",
+    "obtenido": "HTTP 200, valido=True",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-11",
+    "req": "RF17",
+    "nombre": "Recuperar licencia",
+    "esperado": "Mail solo con el código; misma respuesta si el email no existe",
+    "obtenido": "email registrado: HTTP 200 y 1 mail con el código (sin la clave); email desconocido: HTTP 200 sin mail",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-12",
+    "req": "RF18",
+    "nombre": "Panel admin sin credenciales",
+    "esperado": "HTTP 401",
+    "obtenido": "HTTP 401",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-13",
+    "req": "RF18",
+    "nombre": "Panel admin con contraseña incorrecta",
+    "esperado": "HTTP 401",
+    "obtenido": "HTTP 401",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-14",
+    "req": "RF18",
+    "nombre": "Panel admin: ventas y licencias",
+    "esperado": "Lista la venta gratuita y la licencia emitida",
+    "obtenido": "ventas: 1 (gratuito, Gratis); licencias: 1 (1/1 activaciones)",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-15",
+    "req": "RF18",
+    "nombre": "Revocar una licencia",
+    "esperado": "La licencia deja de ser válida",
+    "obtenido": "revocar HTTP 200; estado después: valido=False",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-16",
+    "req": "RF19",
+    "nombre": "Webhook de Mercado Pago con firma inválida",
+    "esperado": "HTTP 200 (para que MP no reintente) y se ignora",
+    "obtenido": "HTTP 200, sin cambios en pagos, se registra «firma inválida»",
+    "resultado": "Pasó"
+  },
+  {
+    "id": "CW-17",
+    "req": "RF19",
+    "nombre": "Webhook con firma válida",
+    "esperado": "Firma aceptada; se consulta el pago a Mercado Pago",
+    "obtenido": "HTTP 200; la firma se acepta y se consulta el pago a MP (falla por no tener MP_ACCESS_TOKEN, se registra y responde 200)",
+    "resultado": "Pasó"
+  }
+]

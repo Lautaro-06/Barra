@@ -1,3 +1,5 @@
+![Banner Logo](./docs/design/Barra%20-%20Banner.png)
+
 # Barra — Sistema de Pedidos
 
 Sistema de gestión **interno** para locales gastronómicos chicos: toma de pedidos de mostrador y

@@ -148,8 +148,13 @@ Detalle en [`docs/tecnico/compilacion-y-empaquetado.md`](../tecnico/compilacion-
 
 ## 2. Presentación del producto
 
-La presentación (5 o 6 slides de apoyo + demo en vivo) y el guion del video de respaldo están en
-[`presentacion.md`](presentacion.md).
+Formato: demo en vivo + 8 diapositivas de apoyo, unos 10 minutos.
+
+| Material | Dónde |
+|---|---|
+| Diapositivas con notas del orador | <https://claude.ai/artifact/EkahGqhX72yFt5kYGBiied> (se descargan como PowerPoint o PDF) |
+| Video de respaldo (1 min 31 s) | [`docs/presentacion/demo-barra.mp4`](../presentacion/demo-barra.mp4) |
+| Guion cronometrado, demo paso a paso y preguntas probables | [`presentacion.md`](presentacion.md) |
 
 **Guion de la demo (actualizado a lo que existe):**
 

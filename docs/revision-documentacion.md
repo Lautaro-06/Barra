@@ -37,6 +37,40 @@ capturas reales. Al final del manual hay una tabla con las limitaciones de esta 
 
 ---
 
+## Seguimiento: estado después de la corrección
+
+Todas las falencias de documentación de esta revisión se corrigieron el mismo 08/10/2026. Las
+secciones siguientes (1 a 6) se conservan como registro de lo que se encontró.
+
+| Hallazgo | Resolución | Dónde |
+|---|---|---|
+| 3.1 Tecnología de la GUI contradictoria | Unificada en Java Swing en todo el documento, con la decisión registrada | [Documento del proyecto](proyecto/documento-del-proyecto.md) §1, §17, §19 · [ADR-001](tecnico/decisiones.md) |
+| 3.2 Instalación y empaquetado | Documentado el estado real y el instalador como trabajo pendiente | [§1.5](proyecto/documento-del-proyecto.md#15-empaquetado) · [Compilación](tecnico/compilacion-y-empaquetado.md) |
+| 3.3 DER desactualizado | DER completo de SQLite y MySQL, en diagramas | [§16](proyecto/documento-del-proyecto.md#16-der) |
+| 3.4 Requisitos y casos de uso | Requisitos con ID, prioridad, estado y trazabilidad; 15 casos de uso especificados | [§9](proyecto/documento-del-proyecto.md#9-requisitos-funcionales-y-no-funcionales) · [Casos de uso](proyecto/casos-de-uso.md) |
+| 3.5 Errores de redacción | Corregidos en la versión 2 del documento | [Documento del proyecto](proyecto/documento-del-proyecto.md) |
+| 4.1 README raíz | Completo | [README.md](../README.md) |
+| 4.2 README del backend | Endpoints completos, estado real, variables y concurrencia actualizados | [README del backend](../application/barra-backend/README.md) |
+| 4.3 README de la GUI | Pantallas, requisitos y compilación actualizados | [README de la GUI](../application/barra-gui/README.md) |
+| 4.4 Spec de la web | Estado, nombres de carpetas, esquema, descargas y pruebas actualizados | [Spec](specs/barra-pagina.md) |
+| 4.5 README de la web vacíos | Escritos | [Web](../barraPagina/barraWeb/README.md) · [Backend web](../barraPagina/barraWebBackend/README.md) |
+| §2 Presentación | 8 diapositivas, guion y video de respaldo de 1:31 | [Presentación](proyecto/presentacion.md) |
+| §2 Presupuesto y propuesta | Escritos, con fuentes y supuestos marcados | [Presupuesto](proyecto/presupuesto.md) · [Propuesta](proyecto/propuesta-formal.md) |
+| §2 Entrevistas y encuestas | Instrumentos listos; **faltan los resultados reales** | [Relevamiento](proyecto/entrevistas-y-encuestas.md) |
+| §2 Gantt | Planificado y real (según commits), con análisis del desvío | [§11](proyecto/documento-del-proyecto.md#11-diagrama-de-gantt) |
+| §2 Plan de pruebas | 65 casos ejecutados (64 pasan), automatizados en `pruebas/` | [Plan de pruebas](proyecto/plan-de-pruebas.md) |
+| §2 Documentos técnicos y legales | Compilación, despliegue web, manual del panel admin, decisiones, changelog y borradores legales | [Índice de la documentación](README.md) |
+
+**Pendiente de datos del equipo:** nombre del Product Owner, resultados del relevamiento, fecha
+de la defensa, datos del cliente y datos legales (lista completa en el [índice](README.md#lo-que-tiene-que-completar-el-equipo)).
+
+**Problemas del producto (sección 5):** siguen abiertos; no se tocó el código. Se documentaron en
+el manual, en los README y en el plan de pruebas (DEF-01). Al escribir la documentación técnica se
+sumaron dos observaciones: un mismo email puede obtener el plan Gratis varias veces, y revocar una
+licencia no pide confirmación ni se puede deshacer desde el panel.
+
+---
+
 ## 1. Inventario de lo que existe
 
 | Documento | Ubicación | Estado |

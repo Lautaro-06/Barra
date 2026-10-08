@@ -1,92 +1,75 @@
 ![Banner Logo](./docs/design/Barra%20-%20Banner.png)
 
-## Descripcion
+# Barra — Sistema de Pedidos
 
-Sistema interno de gestión de pedidos y stock pensado para comercios gastronómicos locales (restaurantes, bares, panaderías, etc). No es una app de cara al cliente, sino que está diseñada para que el propio negocio controle su operación diaria de forma simple y ordenada.
+Sistema de gestión **interno** para locales gastronómicos chicos: toma de pedidos de mostrador y
+de mesa, tablero de cocina, control de stock con alertas por email al dueño, resumen diario de
+ventas y copias de seguridad automáticas. Funciona en la PC del local, sin depender de internet.
+Se vende con licencia a través de una web propia.
 
-## Objetivo
+Proyecto de **Programación sobre Redes — Grupo 1**: Sofía Power (Scrum Master), Mauro Beltrán,
+Lautaro Palombo y Thomas Barrera Fuentes.
 
-Hoy en día muchos comercios gastronómicos chicos y medianos manejan su stock y sus pedidos internos con planillas sueltas, cuadernos o sistemas pensados para operaciones mucho más grandes. Barra busca ofrecer una alternativa liviana, enfocada específicamente en la gestión interna (pedidos y stock), sin la complejidad ni el costo de plataformas más completas como Fudo, HivePOS o Pedix.
+**Versión actual:** 1.0.0 — ver [CHANGELOG](CHANGELOG.md).
 
-## Características principales
+![Pantalla Vender](docs/img/manual/01-vender-pedido.png)
 
-- Gestión de stock en tiempo real
-- Registro y seguimiento de pedidos internos
-- Aplicación de escritorio para uso en el local
-- Sitio web para venta y administración de licencias del sistema
+---
 
-*(Esta lista se va a ir completando a medida que se definan más casos de uso)*
+## Componentes
 
-## Tecnologías utilizacas
+| Carpeta | Qué es | Tecnología |
+|---|---|---|
+| [`application/barra-backend`](application/barra-backend) | Backend local: lógica de negocio, hilos, emails. Único dueño de la base | Python, FastAPI, SQLite |
+| [`application/barra-gui`](application/barra-gui) | App de escritorio: pantallas Vender, Mesas, Cocina y Admin | Java 17, Swing, Maven |
+| [`barraPagina/barraWeb`](barraPagina/barraWeb) | Web de venta: planes, compra, recuperar licencia, panel admin | React, Vite, Tailwind |
+| [`barraPagina/barraWebBackend`](barraPagina/barraWebBackend) | Backend de la web: compras, licencias, Mercado Pago | Node.js, Express, MySQL |
+| [`pruebas`](pruebas) | Campaña de pruebas automatizada | Python |
+| [`docs`](docs) | Toda la documentación | Markdown |
 
-### Aplicación de escritorio
-- Frontend: JavaFX
-- Backend: Python (Flask / FastAPI)
-- Comunicación: HTTP local entre frontend y backend
-- Base de datos: SQLite
+```text
+GUI (Java) ──HTTP 127.0.0.1:8000──▶ Backend local (Python) ──▶ barra.db (SQLite)
+                                          └──▶ email del dueño (alertas y resumen)
 
-### Sitio de ventas y licencias
-- Frontend: React + Vite
-- Backend: Node.js + Express
-- Base de datos: MySQL
-- Pagos: Mercado Pago
-
-## Arquitectura
-
-La app de escritorio funciona de forma local: el frontend (JavaFX o Electron/React) se comunica con un backend en Python vía HTTP local, y los datos se persisten en SQLite. El sitio web de ventas es independiente, con su propio backend en Node/Express y base de datos MySQL, encargado de gestionar licencias y pagos.
-
-## Instalación
-
-*(Pendiente — se va a completar con los pasos para levantar el backend, el frontend y el sitio de ventas)*
-
-## Estructura del repositorio
-
-```
-Barra/
-├── application/ # Archivos Aplicación Java + Python
-│   ├── barra-backend/ # Python con Flask y FastAPI (Intérprete: Venv)
-│   │   ├── app/ # Archivos Python utilizados para crear el backend 
-│   │   ├── run_backend.py # Llama a los archivos necesarios en app/ para hacer el ejecutable
-│   │   ├── README.md
-│   │   └── requirements.txt # Librerías instaladas
-│   ├── barra-gui/ # JavaFX
-│   │   ├── src/main/java/com/barra/gui/ # Archivos de las clases en texto plano
-│   │   ├── README.md
-│   │   └── pom.xml # Compila, prueba y empaqueta el proyecto
-├── barraPagina/ # Full-stack de la página de venta e instalación
-│   ├── barraWeb/ # Frontend con React + Vite
-│   │   ├── public/
-│   │   │   └── downloads/ # Carpeta que tiene ambos ejecutables de la aplicación (Backend y GUI)
-│   │   │       ├── barra-backend-v1.0.0.exe # Backend hecho con Python y ejecutado con PyInstaller
-|   |   |       └── barra-gui-v1.0.0.jar # GUI hecho con Java y ejecutado con Maven
-│   │   ├──src/
-│   │   │   ├──components/ # Componentes reutilizales
-│   │   │   ├── pages/ # Vistas/páginas
-│   │   │   ├── services/ # Requests HTTP
-│   │   │   ├── styles/ # Diseño de la página
-│   │   │   ├── app.jsx
-│   │   │   └── main.jsx
-│   │   ├── README.md
-│   │   ├── index.html
-│   │   ├── package-lock.json
-│   │   ├── package.json
-│   │   ├── postcss.config.json
-│   │   ├── tailwind.config.json
-│   │   └── vite.config.json
-│   ├── barraWebBackend/ # Backend con JavaScript y MySQL
-│   │   ├── src/
-│   │   │   ├── controllers/ # Controladores HTTP
-│   │   │   ├── middleware/ # Auth y validaciones
-│   │   │   ├── models/ # Modelos Sequelize
-│   │   │   ├── routes/ # Rutas HTTP
-│   │   │   ├── services/ # Email y forma de pago
-│   │   │   └── utils/ # Utilidades compartidas
-│   │   ├── app.js
-│   │   └── db.js # Configuración base de datos
-│   └── docs/ # Documentación
-└── README.md # Este documento
+Web de venta (React) ──/api──▶ Backend web (Node) ──▶ MySQL
+                                     ├──▶ Mercado Pago (cobro + webhook)
+                                     └──▶ email del comprador (licencia)
 ```
 
-## Plan de trabajo
- 
-El desarrollo está planificado en un Gantt de 8 semanas. Estado actual: etapa de planificación y documentación (requisitos, actores, casos de uso, diagrama ER, análisis FODA e investigación de competidores ya definidos).
+## Para usar Barra
+
+Si sos dueño o empleado de un local, todo está en el **[manual de usuario](docs/manual-de-usuario.md)**:
+instalación, primer uso, uso diario, reportes y problemas frecuentes.
+
+## Para desarrollar
+
+| Parte | Cómo levantarla | Queda en |
+|---|---|---|
+| Backend local | `cd application/barra-backend` → `python -m venv venv` → activar → `pip install -r requirements.txt` → `python run_backend.py` | `http://127.0.0.1:8000` (API en `/docs`) |
+| GUI | `cd application/barra-gui` → `mvn package` → `java -jar target/barra-gui-1.0.0.jar` | Ventana de escritorio |
+| Backend web | `cd barraPagina/barraWebBackend` → `npm ci` → `.env` desde `.env.example` → `npm run dev` | `http://localhost:4000/api` |
+| Web de venta | `cd barraPagina/barraWeb` → `npm ci` → `npm run dev` | `http://localhost:5173` |
+
+Requisitos: Python 3.10+, JDK 17+ y Maven, Node.js 18+, MySQL 8 o MariaDB 10.11+. Detalle en el
+README de cada carpeta y en:
+
+- [Compilación y empaquetado](docs/tecnico/compilacion-y-empaquetado.md) (generar el `.exe` y el `.jar`)
+- [Despliegue de la web](docs/tecnico/despliegue-web.md) (MySQL, `.env`, Mercado Pago, producción)
+
+**Pruebas:** `python pruebas/test_escritorio.py` y `python pruebas/test_web.py` (ver [`pruebas/README.md`](pruebas/README.md)).
+
+## Documentación
+
+Índice completo en [`docs/README.md`](docs/README.md). Lo principal:
+
+| Documento | Para quién |
+|---|---|
+| [Manual de usuario](docs/manual-de-usuario.md) | Locales que usan Barra |
+| [Documento del proyecto](docs/proyecto/documento-del-proyecto.md) | Evaluación del proyecto: arquitectura, requisitos, DER, Gantt, FODA y más |
+| [Plan de pruebas](docs/proyecto/plan-de-pruebas.md) | Resultados de las pruebas (65 de 65 casos) |
+| [Decisiones de arquitectura](docs/tecnico/decisiones.md) | Equipo de desarrollo |
+
+## Ramas
+
+Se trabaja sobre `development`; cada funcionalidad se desarrolla en su rama (`app/concurrence`,
+`app/functions`, `appView`) y se integra a `development` con un merge.

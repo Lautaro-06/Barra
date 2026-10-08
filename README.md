@@ -20,7 +20,7 @@ Hoy en día muchos comercios gastronómicos chicos y medianos manejan su stock y
 ## Tecnologías utilizacas
 
 ### Aplicación de escritorio
-- Frontend: JavaFX / Electron + React
+- Frontend: JavaFX
 - Backend: Python (Flask / FastAPI)
 - Comunicación: HTTP local entre frontend y backend
 - Base de datos: SQLite
@@ -46,12 +46,10 @@ Barra/
 ├── application/ # Archivos Aplicación Java + Python
 │   ├── barra-backend/ # Python con Flask y FastAPI (Intérprete: Venv)
 │   │   ├── app/ # Archivos Python utilizados para crear el backend 
-│   │   ├── dist/ # Carpeta que tiene el ejecutable
-│   │   │   └── barra-backend.exe # Ejecutable hecho con PyInstaller
 │   │   ├── run_backend.py # Llama a los archivos necesarios en app/ para hacer el ejecutable
 │   │   ├── README.md
 │   │   └── requirements.txt # Librerías instaladas
-│   ├── barra-gui/ # JavaFX con Electron y React
+│   ├── barra-gui/ # JavaFX
 │   │   ├── src/main/java/com/barra/gui/ # Archivos de las clases en texto plano
 │   │   ├── target/ # Archivos compilados en bytecode
 │   │   │   └── barra-gui-1.0.0.jar # Ejecutable GUI Barra
@@ -59,6 +57,10 @@ Barra/
 │   │   └── pom.xml # Compila, prueba y empaqueta el proyecto
 ├── barraPagina/ # Full-stack de la página de venta e instalación
 │   ├── barraWeb/ # Frontend con React + Vite
+│   │   ├── public/
+│   │   │   └── downloads/ # Carpeta que tiene ambos ejecutables de la aplicación (Backend y GUI)
+│   │   │       ├── barra-backend-v1.0.0.exe # Backend hecho con Python y ejecutado con PyInstaller
+|   |   |       └── barra-gui-v1.0.0.jar # GUI hecho con Java y ejecutado con Maven
 │   │   ├──src/
 │   │   │   ├──components/ # Componentes reutilizales
 │   │   │   ├── pages/ # Vistas/páginas

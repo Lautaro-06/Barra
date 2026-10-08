@@ -404,7 +404,7 @@ def _mesa_a_dict(conn, mesa_row) -> dict:
 @app.get("/mesas", response_model=list[MesaOut])
 def listar_mesas():
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM mesa ORDER BY id").fetchall()
+    rows = conn.execute("SELECT * FROM mesa WHERE activa = 1 ORDER BY id").fetchall()
     return [_mesa_a_dict(conn, r) for r in rows]
 
 
@@ -421,14 +421,18 @@ def crear_mesa(mesa: MesaIn):
 
 @app.delete("/mesas/{mesa_id}", status_code=204)
 def eliminar_mesa(mesa_id: int):
+    """Baja lógica: la mesa deja de aparecer en el salón pero la fila queda,
+    porque las cuentas cerradas la siguen referenciando (cuenta.mesa_id) y
+    son parte del historial de ventas. Un DELETE real fallaba con
+    'FOREIGN KEY constraint failed' en cuanto la mesa había tenido una cuenta."""
     conn = get_connection()
     with write_lock:
-        row = conn.execute("SELECT * FROM mesa WHERE id = ?", (mesa_id,)).fetchone()
+        row = conn.execute("SELECT * FROM mesa WHERE id = ? AND activa = 1", (mesa_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "Mesa no encontrada")
         if row["estado"] != "libre":
             raise HTTPException(400, "No se puede borrar una mesa con la cuenta abierta")
-        conn.execute("DELETE FROM mesa WHERE id = ?", (mesa_id,))
+        conn.execute("UPDATE mesa SET activa = 0 WHERE id = ?", (mesa_id,))
         conn.commit()
 
 
@@ -438,7 +442,7 @@ def abrir_mesa(mesa_id: int):
     acumulando pedidos hasta que se cierre (ver /mesas/{id}/cerrar)."""
     conn = get_connection()
     with write_lock:
-        row = conn.execute("SELECT * FROM mesa WHERE id = ?", (mesa_id,)).fetchone()
+        row = conn.execute("SELECT * FROM mesa WHERE id = ? AND activa = 1", (mesa_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "Mesa no encontrada")
         cuenta_abierta = conn.execute(

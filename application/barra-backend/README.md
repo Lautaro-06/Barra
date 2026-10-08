@@ -73,7 +73,7 @@ Junto a `run_backend.py` (o junto al `.exe`):
 | PATCH | `/pedidos/{id}/estado` | `en_preparacion`, `listo` o `entregado` |
 | GET | `/mesas` | Mesas con su estado y el total de la cuenta abierta |
 | POST | `/mesas` | Alta de mesa |
-| DELETE | `/mesas/{id}` | Baja de mesa (solo libre; ver defecto conocido) |
+| DELETE | `/mesas/{id}` | Baja lógica de mesa (solo libre; conserva sus cuentas cerradas en el historial) |
 | POST | `/mesas/{id}/abrir` | Abre la cuenta de la mesa |
 | GET | `/mesas/{id}/cuenta` | Cuenta abierta con todas sus rondas |
 | POST | `/mesas/{id}/pedidos` | Suma una ronda a la cuenta abierta |
@@ -150,6 +150,5 @@ Resultados en el [plan de pruebas](../../docs/proyecto/plan-de-pruebas.md).
 
 **Pendiente:**
 
-- Defecto conocido: `DELETE /mesas/{id}` de una mesa que ya tuvo cuentas responde 500 (las cuentas cerradas la referencian).
 - Validación de la licencia contra la web de venta (RF20).
 - Modificar o cancelar pedidos (RF21) y endpoints de historial (RF22).

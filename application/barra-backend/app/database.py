@@ -90,7 +90,8 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS mesa (
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre  TEXT NOT NULL,
-            estado  TEXT NOT NULL DEFAULT 'libre'
+            estado  TEXT NOT NULL DEFAULT 'libre',
+            activa  INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS cuenta (
@@ -141,6 +142,7 @@ def init_db() -> None:
     _agregar_columna_si_falta(conn, "producto", "umbral_stock", "umbral_stock INTEGER DEFAULT NULL")
     _agregar_columna_si_falta(conn, "producto", "alerta_stock_enviada", "alerta_stock_enviada INTEGER NOT NULL DEFAULT 0")
     _agregar_columna_si_falta(conn, "pedido", "cuenta_id", "cuenta_id INTEGER REFERENCES cuenta(id)")
+    _agregar_columna_si_falta(conn, "mesa", "activa", "activa INTEGER NOT NULL DEFAULT 1")
     _agregar_columna_si_falta(conn, "configuracion", "umbral_stock_global", "umbral_stock_global INTEGER NOT NULL DEFAULT 5")
     _agregar_columna_si_falta(conn, "configuracion", "email_habilitado", "email_habilitado INTEGER NOT NULL DEFAULT 0")
     _agregar_columna_si_falta(conn, "configuracion", "email_destino", "email_destino TEXT")

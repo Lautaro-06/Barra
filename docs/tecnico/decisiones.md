@@ -102,8 +102,9 @@ un pedido de mostrador tiene `cuenta_id` en NULL. Así la cocina, el stock y el 
 igual a los dos tipos de pedido.
 
 **Consecuencias.** Más valor para el local y un caso de uso más (CU-02, CU-03). Sumó alcance no
-planificado, una de las causas del desvío del Gantt. Defecto conocido: una mesa con cuentas
-cerradas no se puede borrar (DEF-01).
+planificado, una de las causas del desvío del Gantt. Como las cuentas cerradas referencian a su
+mesa, una mesa usada no se puede borrar de la base: la baja es lógica (`mesa.activa = 0`), así
+sale del salón y su historial se conserva (corrigió DEF-01).
 
 ---
 

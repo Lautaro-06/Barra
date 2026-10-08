@@ -297,12 +297,11 @@ Entrá a **Admin → Mesas**.
 - **Agregar una mesa:** escribí el nombre en el cuadro de arriba a la derecha (ej. «Mesa 7»,
   «Barra 1», «Vereda 2») y tocá **+ Agregar mesa**.
 - **Eliminar una mesa:** tocá **Eliminar** en su fila. Solo se puede con la mesa **libre**
-  (si está ocupada, el botón aparece gris). **No pide confirmación.**
+  (si está ocupada, el botón aparece gris). **No pide confirmación.** Las ventas de esa mesa no se
+  pierden: siguen en el resumen diario.
 
-> **Esta versión:** una mesa que ya se usó alguna vez (que tuvo al menos una cuenta) no se puede
-> eliminar: aparece un aviso rojo «No se pudo eliminar la mesa: Error del backend (500)…».
-> Conviene armar bien las mesas **antes** de empezar a usarlas. Tampoco se les puede cambiar el
-> nombre: hay que crear una nueva.
+> **Esta versión:** a las mesas no se les puede cambiar el nombre: hay que crear una nueva y
+> eliminar la vieja.
 
 ### 7.4 Email: alertas y resumen diario
 
@@ -618,7 +617,7 @@ volver a escribir la **Contraseña SMTP** en Admin → Configuración.
 | «No se pudo leer la contraseña SMTP» | Se perdió o cambió `barra_secret.key` | Volvé a escribir la **Contraseña SMTP** y guardá |
 | No llegan las alertas de stock | La casilla no está tildada, el mail está en spam, ya se avisó de ese producto, o el servidor está cerrado | Revisá la casilla y el spam. Recordá que la alerta se repite solo después de reponer el producto por encima del umbral. El servidor tiene que estar abierto |
 | Una mesa quedó «Ocupada» con $ 0,00 | Se abrió la mesa y no se pidió nada | Abrila y tocá **Cerrar cuenta y generar ticket** |
-| No puedo eliminar una mesa | Está ocupada, o ya tuvo cuentas (limitación de esta versión) | Si está ocupada, cerrá su cuenta. Si ya se usó, por ahora no se puede eliminar |
+| No puedo eliminar una mesa | Está ocupada (el botón **Eliminar** aparece gris) | Abrila y tocá **Cerrar cuenta y generar ticket**; después eliminala |
 | Me equivoqué en un pedido ya confirmado | Esta versión no permite modificar ni cancelar pedidos | Avisale a la cocina. Para corregir el stock, editalo en Admin → Productos |
 | Perdí el código o la clave de la licencia | — | Usá **Recuperar licencia** en la web (solo reenvía el código). Para la clave secreta, contactá al equipo |
 

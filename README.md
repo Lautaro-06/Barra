@@ -64,7 +64,7 @@ README de cada carpeta y en:
 |---|---|
 | [Manual de usuario](docs/manual-de-usuario.md) | Locales que usan Barra |
 | [Documento del proyecto](docs/proyecto/documento-del-proyecto.md) | Evaluación del proyecto: arquitectura, requisitos, DER, Gantt, FODA y más |
-| [Plan de pruebas](docs/proyecto/plan-de-pruebas.md) | Resultados de las pruebas (64 de 65 casos) |
+| [Plan de pruebas](docs/proyecto/plan-de-pruebas.md) | Resultados de las pruebas (65 de 65 casos) |
 | [Decisiones de arquitectura](docs/tecnico/decisiones.md) | Equipo de desarrollo |
 
 ## Ramas

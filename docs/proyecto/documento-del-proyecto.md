@@ -258,7 +258,7 @@ Las pruebas citadas están en el [plan de pruebas](plan-de-pruebas.md) y los cas
 | RF06 | Avisar al dueño por email cuando el stock de un producto queda por debajo de su umbral (propio o global), una sola vez por cruce | M | Implementado (solo email) | CU-08 | CP-25, CP-26, CP-27 |
 | RF07 | Generar un reporte de ventas del período: total, pedidos, ticket promedio, mostrador/mesas y productos más vendidos | M | Implementado (por email) | CU-09 | CP-28, CP-29 |
 | RF08 | Alta, modificación y baja lógica (pausar) de productos del catálogo | M | Implementado (sin borrado físico) | CU-05 | CP-03 a CP-07 |
-| RF09 | Gestionar mesas y cuentas: alta y baja de mesas, abrir cuenta, sumar rondas, cerrar e imprimir el ticket | S | Implementado (con un defecto, ver CP-17) | CU-02, CU-03, CU-06 | CP-13 a CP-17 |
+| RF09 | Gestionar mesas y cuentas: alta y baja de mesas, abrir cuenta, sumar rondas, cerrar e imprimir el ticket | S | Implementado | CU-02, CU-03, CU-06 | CP-13 a CP-17 |
 | RF10 | Configurar el nombre del local y los datos del dueño | M | Implementado | CU-07 | CP-18, CP-19 |
 | RF11 | Configurar el email (SMTP) con validación y envío de un email de prueba | M | Implementado | CU-07 | CP-20 a CP-24 |
 | RF12 | Enviar automáticamente el resumen diario a la hora configurada | S | Implementado | CU-09 | CP-30 |

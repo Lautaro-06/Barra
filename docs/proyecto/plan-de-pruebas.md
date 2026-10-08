@@ -5,7 +5,7 @@
 | Versión probada | 1.0.0 (rama `development`) |
 | Fecha de ejecución | 8 de octubre de 2026 |
 | Tarea del Gantt | M – Pruebas integrales |
-| Resultado global | **64 de 65 casos pasaron.** 1 defecto abierto (CP-17) |
+| Resultado global | **65 de 65 casos pasan.** El único defecto encontrado (DEF-01, caso CP-17) se corrigió y el caso se volvió a ejecutar |
 
 ---
 
@@ -81,7 +81,7 @@ prioridad S se acepta si tiene una solución temporal documentada en el manual.
 | CP-14 | RF09 | Ronda en mesa sin cuenta abierta | HTTP 400 «abrila primero» | HTTP 400: La mesa no tiene una cuenta abierta - abrila primero | ✅ Pasó |
 | CP-15 | RF09 | Eliminar mesa ocupada | HTTP 400 «No se puede borrar una mesa con la cuenta abierta» | HTTP 400: No se puede borrar una mesa con la cuenta abierta | ✅ Pasó |
 | CP-16 | RF09 | Alta y baja de una mesa nunca usada | HTTP 201 y HTTP 204 | alta HTTP 201, baja HTTP 204 | ✅ Pasó |
-| CP-17 | RF09 | Eliminar mesa libre que ya tuvo cuentas | HTTP 204 (o 400 con un motivo claro) | HTTP 500: Internal Server Error | ❌ Falló |
+| CP-17 | RF09 | Eliminar mesa libre que ya tuvo cuentas | HTTP 204 (o 400 con un motivo claro) | HTTP 204 (antes de corregir DEF-01: HTTP 500) | ✅ Pasó |
 | CP-18 | RF10 | Datos del dueño con email inválido | HTTP 422 | HTTP 422 | ✅ Pasó |
 | CP-19 | RF10 | Sin email de destino, los mails van al dueño | email_destino_efectivo = email del dueño | email_destino None, efectivo duena@local.test | ✅ Pasó |
 | CP-20 | RF11 | Habilitar email sin SMTP completo | HTTP 400 con los campos que faltan | HTTP 400: Para habilitar el email hacen falta: smtp_host, smtp_usuario, smtp_password | ✅ Pasó |
@@ -154,9 +154,9 @@ y datos de ejemplo; las capturas son la evidencia.
 
 ## 8. Defectos encontrados
 
-| ID | Caso | Severidad | Descripción | Causa | Solución temporal | Propuesta de corrección |
+| ID | Caso | Severidad | Descripción | Causa | Estado | Corrección |
 |---|---|---|---|---|---|---|
-| DEF-01 | CP-17 | Media | Eliminar una mesa que alguna vez tuvo una cuenta responde **HTTP 500** («Error del backend (500)» en la GUI) | La tabla `cuenta` referencia a la mesa y SQLite rechaza el borrado (`FOREIGN KEY constraint failed`); el endpoint no lo contempla | Documentada en el manual: armar las mesas antes de usarlas | Que `DELETE /mesas/{id}` responda 400 con un motivo claro, o agregar una baja lógica (`mesa.activa = 0`) que conserve el historial |
+| DEF-01 | CP-17 | Media | Eliminar una mesa que alguna vez tuvo una cuenta respondía **HTTP 500** («Error del backend (500)» en la GUI) | La tabla `cuenta` referencia a la mesa y SQLite rechaza el borrado (`FOREIGN KEY constraint failed`); el endpoint no lo contemplaba | ✅ Corregido el 08/10/2026 (commit `5119ce2`); `.exe` regenerado | Baja lógica: `DELETE /mesas/{id}` pone `mesa.activa = 0` y responde 204. La mesa sale del salón y sus cuentas cerradas siguen en el historial y en el resumen. Campaña de escritorio: 34/34 |
 
 **Observaciones** (no son fallas de requisitos, pero afectan la experiencia; detalle en
 [`docs/revision-documentacion.md`](../revision-documentacion.md#5-problemas-del-producto-encontrados-al-escribir-el-manual)):
@@ -172,14 +172,14 @@ y datos de ejemplo; las capturas son la evidencia.
 ## 9. Conclusión
 
 - Se cumplen todos los requisitos de prioridad **M** implementados.
-- El único defecto (DEF-01) es de prioridad S, tiene solución temporal y está documentado en el manual.
+- El único defecto encontrado (DEF-01) ya se corrigió: CP-17 pasa y el `.exe` publicado incluye la corrección.
 - Se cumplen los requisitos no funcionales de rendimiento (máximo 7,5 ms frente al límite de 1 s),
   concurrencia (30 pedidos simultáneos sin vender de más), funcionamiento sin conexión,
   persistencia y seguridad de credenciales.
 - **RNF04** (instalación sin conocimientos técnicos) no se cumple todavía: requiere instalar Java
   y abrir dos programas. Queda en el backlog de la próxima versión.
 
-**La versión 1.0.0 se considera apta para la presentación**, con DEF-01 y RNF04 como pendientes conocidos.
+**La versión 1.0.0 se considera apta para la presentación**, con RNF04 como pendiente conocido.
 
 ---
 

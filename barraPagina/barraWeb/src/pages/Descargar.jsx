@@ -14,7 +14,7 @@ const ARCHIVOS = [
       "Guarda los productos, pedidos y ventas de tu local. Tiene que estar abierto mientras usás Barra.",
     archivo: `barra-backend-v${VERSION}.exe`,
     requisito: "Windows de 64 bits",
-    tamaño: "21,7 MB",
+    tamaño: "18,9 MB",
   },
   {
     nombre: "Aplicación de Barra",

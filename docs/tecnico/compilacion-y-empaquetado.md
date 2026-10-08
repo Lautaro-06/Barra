@@ -20,7 +20,8 @@ web de venta.
 
 ### 1.1 Requisitos
 
-- Python 3.10 o superior (el código usa anotaciones `str | None`). El `.exe` de la v1.0.0 se generó con Python 3.14.
+- Python 3.10 o superior (el código usa anotaciones `str | None`). El `.exe` publicado se
+  regeneró el 08/10/2026, con la corrección de DEF-01, usando Python 3.12.10 y PyInstaller 6.22 (ver §1.6).
 - Dependencias: `requirements.txt` (FastAPI, uvicorn, Pydantic, cryptography).
 
 ### 1.2 Correr en desarrollo
@@ -79,14 +80,13 @@ pip install -r requirements.txt pyinstaller
 pyinstaller --onefile --name barra-backend run_backend.py
 ```
 
-- Resultado: `dist\barra-backend.exe` (≈ 23 MB). No necesita opciones extra: PyInstaller incluye uvicorn y FastAPI solo.
+- Resultado: `dist\barra-backend.exe` (entre 19 y 23 MB según la versión de Python). No necesita opciones extra: PyInstaller incluye uvicorn y FastAPI solo.
 - Es una app de **consola**: al abrirla muestra una ventana negra con el log. Si se quisiera sin
   ventana, se agrega `--windowed`; `run_backend.py` ya contempla ese caso (redirige la salida),
   pero entonces no hay forma visible de cerrarlo.
 - Al ejecutarse, crea `barra.db`, `barra_secret.key` y `backups\` **junto al `.exe`** (no en la
   carpeta temporal de PyInstaller), así los datos sobreviven entre ejecuciones.
-- PyInstaller deja `build\`, `dist\` y `barra-backend.spec`. `build/` y `*.spec` ya están en el
-  `.gitignore` del backend; `dist/` **no** (la línea dice `dist/yzzzzz`): conviene corregirla a `dist/`.
+- PyInstaller deja `build\`, `dist\` y `barra-backend.spec`; los tres están en el `.gitignore` del backend.
 
 ### 1.5 Probar el ejecutable
 
@@ -94,6 +94,26 @@ pyinstaller --onefile --name barra-backend run_backend.py
 2. Esperar la línea `Uvicorn running on http://127.0.0.1:8000`.
 3. Abrir `http://127.0.0.1:8000/health` en el navegador: tiene que responder `{"status":"ok"}`.
 4. Verificar que aparecieron `barra.db`, `barra_secret.key` y `backups\`.
+
+### 1.6 Generarlo desde Linux (con Wine)
+
+Así se generó el `.exe` publicado con la corrección de DEF-01. PyInstaller no genera ejecutables
+de Windows desde Linux, pero sí desde un Python de Windows corriendo en Wine:
+
+```bash
+sudo apt-get install wine wine64
+# Python 3.12 para Windows, sin instalador (build independiente que usa uv)
+curl -LO "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10%2B20250409-x86_64-pc-windows-msvc-install_only.tar.gz"
+tar -xzf cpython-3.12.10+20250409-x86_64-pc-windows-msvc-install_only.tar.gz   # crea python/
+wine python/python.exe -m pip install -r application/barra-backend/requirements.txt pyinstaller
+cd application/barra-backend
+wine ../../python/python.exe -m PyInstaller --onefile --name barra-backend run_backend.py 2>&1 | cat
+```
+
+- El `| cat` final no es decorativo: si la salida se redirige directo a un archivo, Python en Wine
+  falla con `init_sys_streams: can't initialize sys standard streams`.
+- Se puede probar en el mismo Linux con `wine dist/barra-backend.exe` (pasos de §1.5). Igual
+  conviene abrirlo una vez en una PC con Windows antes de publicarlo.
 
 ---
 

@@ -6,12 +6,19 @@ Todos los cambios importantes de Barra. Formato basado en
 
 ## [Sin publicar]
 
+### Corregido
+
+- Eliminar una mesa que ya tuvo cuentas respondía error 500 (DEF-01). Ahora la baja es lógica
+  (`mesa.activa`): la mesa sale del salón y sus cuentas cerradas siguen en el historial. Las
+  bases existentes se actualizan solas al abrir el backend.
+- Se regeneró `barra-backend-v1.0.0.exe` en `public/downloads/` con la corrección.
+
 ### Documentación
 
 - Documento del proyecto v2 con las 20 secciones actualizadas, casos de uso, presupuesto,
   propuesta formal, instrumentos de relevamiento y plan de pruebas (`docs/proyecto/`).
 - Manual de usuario, guías técnicas, manual del panel admin, registro de decisiones y borradores legales.
-- Campaña de pruebas automatizada en `pruebas/` (64 de 65 casos pasan).
+- Campaña de pruebas automatizada en `pruebas/` (65 de 65 casos pasan).
 
 ## [1.0.0] — 2026-10-08
 
@@ -42,7 +49,7 @@ Primera versión distribuible.
 
 ### Problemas conocidos
 
-- Eliminar una mesa que ya tuvo cuentas responde error 500 (DEF-01).
+- Eliminar una mesa que ya tuvo cuentas responde error 500 (DEF-01; corregido, ver «Sin publicar»).
 - La GUI requiere Java 17+ y hay que abrir primero el backend (RNF04 pendiente).
 - La app de escritorio todavía no pide ni valida la licencia.
 - No se pueden modificar ni cancelar pedidos; no hay pantalla de historial ni de reportes.

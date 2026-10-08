@@ -132,8 +132,8 @@
     "req": "RF09",
     "nombre": "Eliminar mesa libre que ya tuvo cuentas",
     "esperado": "HTTP 204 (o 400 con un motivo claro)",
-    "obtenido": "HTTP 500: Internal Server Error",
-    "resultado": "Falló"
+    "obtenido": "HTTP 204: None",
+    "resultado": "Pasó"
   },
   {
     "id": "CP-18",

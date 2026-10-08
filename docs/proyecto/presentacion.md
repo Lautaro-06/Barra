@@ -23,7 +23,7 @@ se pasa el video de respaldo.
 | 1:00 | **3. La solución** | Las cuatro pantallas. El dueño recibe alertas de stock y un resumen diario por email |
 | 1:45 | **4. Demo en vivo** | Cambiar a la app y seguir los 4 pasos (ver §2). Si falla: video de respaldo |
 | 5:30 | **5. Cómo está hecho** | Java muestra, Python decide. Python único dueño de SQLite. Dos usos de concurrencia: pool de pedidos + hilos de fondo. La web de venta es otro sistema |
-| 6:45 | **6. Probado** | 64 de 65 pruebas automáticas. Concurrencia: 30 pedidos sobre 10 unidades → 10 aceptados. Respuesta máxima 7,5 ms. El único defecto está documentado |
+| 6:45 | **6. Probado** | 65 de 65 pruebas automáticas. Concurrencia: 30 pedidos sobre 10 unidades → 10 aceptados. Respuesta máxima 7,5 ms. El único defecto que encontraron las pruebas ya está corregido |
 | 7:45 | **7. Cómo se consigue** | Web → mail con licencia → instalar. Gratis 10 días, Pro $12.000/mes; Fudo arranca en $22.500. Si hay tiempo, mostrar la web |
 | 8:45 | **8. Lo que sigue** | Licencia dentro de la app, instalador único, cancelar pedidos e historial. Preguntas |
 

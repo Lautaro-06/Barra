@@ -184,19 +184,19 @@ Si el stock repuesto supera el umbral, la alerta de ese producto se rearma (CU-0
 | Objetivo | Adaptar la cantidad y nombres de mesas al local |
 | Pantalla | Admin → Mesas |
 | Requisitos | RF09 |
-| Estado | Implementado (con un defecto, ver FA-3) |
+| Estado | Implementado |
 
 **Flujo principal**
 
 1. El administrador escribe el nombre («Mesa 7», «Vereda 1») y toca **+ Agregar mesa**.
 2. El sistema crea la mesa libre y muestra «Mesa "…" agregada».
-3. Para quitar una mesa libre, toca **Eliminar**; el sistema la borra.
+3. Para quitar una mesa libre, toca **Eliminar**; el sistema la saca del salón.
 
 **Flujos alternativos**
 
 - **FA-1 Nombre vacío:** «Ponele un nombre a la mesa».
 - **FA-2 Mesa ocupada:** el botón Eliminar está deshabilitado; por API se responde «No se puede borrar una mesa con la cuenta abierta».
-- **FA-3 Mesa que ya tuvo cuentas (defecto conocido):** el borrado falla con «Error del backend (500)» porque las cuentas cerradas la siguen referenciando. Ver CP-17 del [plan de pruebas](plan-de-pruebas.md).
+- **FA-3 Mesa que ya tuvo cuentas:** se elimina igual (baja lógica). Sus cuentas cerradas siguen en el historial de ventas y en el resumen diario. Ver CP-17 y DEF-01 del [plan de pruebas](plan-de-pruebas.md).
 
 ---
 

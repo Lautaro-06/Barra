@@ -1,6 +1,5 @@
 # Java / Maven
-target/*
-!target/*.jar
+target/
 *.class
 
 # Python

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import Header from "../components/header.jsx";
 import Footer from "../components/footer.jsx";
 import Card from "../components/card.jsx";
+import Button from "../components/button.jsx";
 
 export default function PagoExitoso() {
   return (
@@ -15,7 +16,10 @@ export default function PagoExitoso() {
             Te mandamos un mail con tu código de licencia y el link de descarga.
             Revisá también la carpeta de spam.
           </p>
-          <Link to="/" className="mt-6 inline-block text-sm font-semibold text-cta hover:text-cta-hover">
+          <Button as={Link} to="/descargar" className="mt-6 w-full">
+            Descargar Barra
+          </Button>
+          <Link to="/" className="mt-4 inline-block text-sm font-semibold text-cta hover:text-cta-hover">
             Volver al inicio
           </Link>
         </Card>

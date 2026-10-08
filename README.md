@@ -43,18 +43,49 @@ La app de escritorio funciona de forma local: el frontend (JavaFX o Electron/Rea
 
 ```
 Barra/
-├── barra-backend/ # Python con Flask y FastAPI
-│   ├── app/
-│   ├── README.md
-│   └── requirements.txt
-├── barra-gui/ # JavaFX con Electron y React
-│   ├── src/main/java/com/barra/gui/ # Archivos de las clases en texto plano
-│   ├── target/classes/com/barra/gui/ # Archivos compilados en bytecode
-│   ├── README.md
-│   └── pom.xml # Compila, prueba y empaqueta el proyecto
+├── application/ # Archivos Aplicación Java + Python
+│   ├── barra-backend/ # Python con Flask y FastAPI (Intérprete: Venv)
+│   │   ├── app/ # Archivos Python utilizados para crear el backend 
+│   │   ├── dist/ # Carpeta que tiene el ejecutable
+│   │   │   └── barra-backend.exe # Ejecutable hecho con PyInstaller
+│   │   ├── run_backend.py # Llama a los archivos necesarios en app/ para hacer el ejecutable
+│   │   ├── README.md
+│   │   └── requirements.txt # Librerías instaladas
+│   ├── barra-gui/ # JavaFX con Electron y React
+│   │   ├── src/main/java/com/barra/gui/ # Archivos de las clases en texto plano
+│   │   ├── target/ # Archivos compilados en bytecode
+│   │   │   └── barra-gui-1.0.0.jar # Ejecutable GUI Barra
+│   │   ├── README.md
+│   │   └── pom.xml # Compila, prueba y empaqueta el proyecto
+├── barraPagina/ # Full-stack de la página de venta e instalación
+│   ├── barraWeb/ # Frontend con React + Vite
+│   │   ├──src/
+│   │   │   ├──components/ # Componentes reutilizales
+│   │   │   ├── pages/ # Vistas/páginas
+│   │   │   ├── services/ # Requests HTTP
+│   │   │   ├── styles/ # Diseño de la página
+│   │   │   ├── app.jsx
+│   │   │   └── main.jsx
+│   │   ├── README.md
+│   │   ├── index.html
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   ├── postcss.config.json
+│   │   ├── tailwind.config.json
+│   │   └── vite.config.json
+│   ├── barraWebBackend/ # Backend con JavaScript y MySQL
+│   │   ├── src/
+│   │   │   ├── controllers/ # Controladores HTTP
+│   │   │   ├── middleware/ # Auth y validaciones
+│   │   │   ├── models/ # Modelos Sequelize
+│   │   │   ├── routes/ # Rutas HTTP
+│   │   │   ├── services/ # Email y forma de pago
+│   │   │   └── utils/ # Utilidades compartidas
+│   │   ├── app.js
+│   │   └── db.js # Configuración base de datos
+│   └── docs/ # Documentación
 └── README.md # Este documento
 ```
-*(Se va a ir documentando a medida que el repositorio tome forma)*
 
 ## Plan de trabajo
  
